@@ -1,0 +1,53 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import print_function
+from __future__ import unicode_literals
+
+import sys
+import json
+import json_matcher
+import argparse
+
+from signal import signal, SIGPIPE, SIG_DFL
+signal(SIGPIPE, SIG_DFL) 
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Pump from kafka to es')
+    parser.add_argument('--file',         '-f', type=str, required=False, default='', help='query list file')
+    parser.add_argument('--invert-match', '-v', action='store_true', required=False, default=False, help='invert match')
+    parser.add_argument('--ignore-json-error', '-i', action='store_true', required=False, default=False, help='ignore json error')
+    parser.add_argument('query', type=str, help='query to find')
+    parser.add_argument('files', type=str, nargs='*', help='files(- or empty means stdin)')
+    args = parser.parse_args()
+
+    invert_match = args.invert_match
+    query_list_file = args.file
+    ignore_json_error = args.ignore_json_error
+
+    if not query_list_file:
+        query = args.query
+        files = args.files
+    else:
+        query = None
+        files = [args.query] + args.files
+
+    matcher = json_matcher.compile(query)
+    def process(f):
+        for line in f:
+            try:
+                j = json.loads(line)
+                match_or_not = matcher.match(j)
+                match_or_not = not match_or_not if invert_match else match_or_not
+                if match_or_not:
+                    print(line, end='')
+            except json.decoder.JSONDecodeError as e:
+                if not ignore_json_error:
+                    raise e
+
+    if not files or files == ['-']:
+        process(sys.stdin)
+        sys.exit(0)
+
+    for filename in files:
+        with open(filename, 'r') as f:
+            process(f)

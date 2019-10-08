@@ -1,0 +1,4 @@
+pyparsing
+pytest
+pydash
+six
