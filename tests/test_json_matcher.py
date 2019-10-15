@@ -126,3 +126,19 @@ def test_implicit_or():
     assert matcher.match(dict(A='안녕'))
     assert matcher.match(dict(B='세상아'))
     assert matcher.match(dict(A='안녕', B='세상아'))
+
+
+def test_match_result():
+    # OR => short circuit
+    matcher = json_matcher.compile('A:안녕 B:세상아', json_matcher.IMPLICIT_OR)
+    r = matcher.match(dict(A='안녕', B='세상아'))
+    l = r.groups()
+    assert len(l) == 1
+    assert l[0] == ('A', '안녕')
+
+    matcher = json_matcher.compile('A:안녕 B:세상아', json_matcher.IMPLICIT_AND)
+    r = matcher.match(dict(A='안녕', B='세상아'))
+    l = r.groups()
+    assert len(l) == 2
+    assert l[0] == ('A', '안녕')
+    assert l[1] == ('B', '세상아')

@@ -110,7 +110,6 @@ class MultipleTextMatcher(BaseMatcher):
     def eval_one(self, input_value, context):
         for matcher in self.matchers:
             if matcher.eval_one(input_value, context):
-                context.add_result(matcher.get_value())
                 return True
         return False
 
@@ -216,7 +215,10 @@ class TermMatcher:
 
     def eval(self, context):
         input_value = context.get(self.field_name)
-        return self.field_value.eval(input_value, context)
+        r = self.field_value.eval(input_value, context)
+        if r:
+            context.add_result((self.field_name, input_value))
+        return r
 
 
 class DictOrObject:
@@ -431,7 +433,7 @@ class JsonMatcher():
         context = MatchContext(j)
         if self.matcher.eval(context):
             r = JsonMatchResult(context.get_result())
-            return context
+            return r
         return
 
 
