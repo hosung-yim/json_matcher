@@ -15,6 +15,7 @@ setuptools.setup(
     name="json_matcher",
     version="0.0.1",
     url="https://github.com/hosung-yim/json_matcher",
+    dowload_url="https://github.com/hosung-yim/json_matcher/archive/0.0.1.tar.gz",
 
     author="Greg.YIM",
     author_email="greg.yim@kakaocorp.com",
