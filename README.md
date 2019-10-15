@@ -2,7 +2,14 @@
 
 Match json object with query like elasticsearch/lucene query.
 
-examples
+examples (jrep)
+
+    # cat a.txt
+    { "foo": "bar", "bar": "foo" }
+    # jrep "foo:bar" /tmp/a.txt
+    { "foo": "bar", "bar": "foo" }
+
+examples (json\_matcher)
 
     >>> import json_matcher
     >>> matcher = json_matcher.compile('foo:bar bar:foo')
@@ -34,8 +41,7 @@ examples
 - match range with ```field_name:[10 TO 20]```, ```field_name:[10 TO 20}``` (exclusive 20)
 - match range(open range) with ```field_name:>20``` (like elasticsearch not lucene)
 - match field existence with ```_exists_:field_name```
-- match expression with ``_expression:"python expression"```
-
+- match expression with ```_expression:"python expression"```
     
 TODO:
  - multiple match with high performace (with Ahocorasik and RE2???)
