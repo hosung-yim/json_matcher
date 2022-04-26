@@ -15,6 +15,7 @@ def test_compile_text_term():
 
     assert json_matcher.match('field_name:"안녕"', dict(field_name='여러분 안녕하세요'))
     assert json_matcher.match('field_name:/안녕/i', dict(field_name='여러분 안녕하세요'))
+    assert json_matcher.match('field_name:/안녕\//i', dict(field_name='여러분 안녕/하세요'))
 
     assert not json_matcher.match('field_name:a{1,3}b', dict(field_name='aab'))
     assert json_matcher.match('field_name:/a{1,3}b/i', dict(field_name='aab'))
@@ -53,6 +54,14 @@ def test_compile_operate_term():
     assert not json_matcher.match('field_name:>="10"', dict(field_name=10))
     # input str     value number(str)
     assert json_matcher.match('field_name:>=10', dict(field_name="10"))
+
+    d = {"red": "{\"res\":false,\"subs\":[\"https://0-142k.tistory.com/api\"],\"mains\":[\"https://0-142k.tistory.com/\"],\"time\":2795,\"dest\":\"https://0-142k.tistory.com/?q=%EB%8D%B0%EC%96%B4%20%EB%8D%B0%EB%B8%94%20%EB%8B%A4%EC%8B%9C%EB%B3%B4%EA%B8%B0%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C\",\"begin\":\"http://0-142k.tistory.com/\",\"timeout\":false}", "dest_url": "https://0-142k.tistory.com/?q=%EB%8D%B0%EC%96%B4%20%EB%8D%B0%EB%B8%94%20%EB%8B%A4%EC%8B%9C%EB%B3%B4%EA%B8%B0%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C", "docid": "12VYGYuncxK4v1nFSx", "service": "tistoryall", "start_url": "http://0-142k.tistory.com/", "dest_sld": "0-142k.tistory.com", "dest_host": "0-142k.tistory.com", "title": "\ub370\uc5b4 \ub370\ube14 \ub2e4\uc2dc\ubcf4\uae30 \ub2e4\uc6b4\ub85c\ub4dc", "userid": "3338219", "inserted_at": "2020-01-28T12:17:50"}
+    assert json_matcher.match('inserted_at:>"2020-01-28T12:17:49"', d)
+
+
+def test_integer_field_match():
+    # input str(number parsable)     value number(str)
+    assert not json_matcher.match('field_name:0', dict(field_name=50))
 
 
 def test_compile_multiple_term():

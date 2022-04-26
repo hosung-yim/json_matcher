@@ -63,7 +63,7 @@ class BaseMatcher:
         raise TypeError
 
     def eval(self, input_value, context):
-        # 시작하기 전에 한번 검사해서 generator 생성을 차단
+        # 시작하기 전에 한번 검사해서 flat_nested_object 에 의한 generator 생성을 차단
         if isinstance(input_value, numbers.Number) or isinstance(input_value, string_types):
             return self.eval_one(input_value, context)
 
@@ -77,7 +77,11 @@ class TextMatcher(BaseMatcher):
     def __init__(self, value):
         self.value = value.value
         self.pattern = None
-        if isinstance(value, RQuotedString):
+        self.string_only = False
+
+        if isinstance(value, QuotedString):
+            self.string_only = True
+        elif isinstance(value, RQuotedString):
             options = value.options
             flags = 0
             if 'i' in options:
@@ -88,6 +92,18 @@ class TextMatcher(BaseMatcher):
         return 'TextMatcher:{}'.format(self.value)
 
     def eval_one(self, input_value, context):
+        # input_value 가 숫자형태인 경우 Int/Float 변환을 통한 매치를 우선 시도한다.
+        if not self.string_only and isinstance(input_value, numbers.Number):
+            try:
+                return int(self.value) == int(input_value)
+            except ValueError:
+                pass
+
+            try:
+                return (abs(float(self.value)) - abs(float(input_value))) < 1e-09
+            except ValueError:
+                pass
+
         if not isinstance(input_value, string_types):
             input_value = str(input_value)
 
@@ -110,6 +126,7 @@ class MultipleTextMatcher(BaseMatcher):
     def eval_one(self, input_value, context):
         for matcher in self.matchers:
             if matcher.eval_one(input_value, context):
+                context.add_result(matcher.get_value())
                 return True
         return False
 
@@ -203,12 +220,6 @@ class TermMatcher:
     def __init__(self, field_name, field_value):
         self.field_name = field_name
         self.field_value = field_value
-        # _expr_, _exists_ => 파싱할 때 Class 를 다르게..
-
-        # fieldname == '_expr_', type(field_value) == TextMatcher => expression
-        # match if _expr_ has value more than 0, or True
-
-        # fieldname == '_exists_', type(field_value) == TextMatcher => check exists
 
     def __repr__(self):
         return 'TermMatcher({}:{})'.format(self.field_name, self.field_value)
@@ -363,7 +374,7 @@ def get_parser(implicit_bin_op='AND'):
     valid_keyword = pp.Regex(r'[a-zA-Z_][a-zA-Z0-9_.\[\]]*')
     valid_text = pp.Regex(r'([^\s\)]+)').setParseAction(lambda t: ValidText(t[0]))
     quoted_string = pp.QuotedString('"').setParseAction(lambda t: QuotedString(t[0]))
-    rquoted_string = (pp.QuotedString('/') + pp.Optional(pp.Regex(r'[i]'))) \
+    rquoted_string = (pp.QuotedString('/', escChar='\\', escQuote='\\/') + pp.Optional(pp.Regex(r'[i]'))) \
             .setParseAction(lambda t: RQuotedString(t[0], t[1]) if len(t) == 2 else RQuotedString(t[0], ''))
 
     field_text_value = (quoted_string | rquoted_string | valid_text )('text_field_value').setParseAction(lambda t: TextMatcher(t[0]))
@@ -456,6 +467,7 @@ def match(expression, j, flags=0):
     '''match json with lucene like query'''
     matcher = compile(expression, flags)
     return matcher.match(j)
+
 
 __all__ = ['compile', 'match', 
         'JsonMatcher', 'MatchContext', 'JsonMatchResult',
