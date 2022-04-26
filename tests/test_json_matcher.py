@@ -15,7 +15,7 @@ def test_compile_text_term():
 
     assert json_matcher.match('field_name:"안녕"', dict(field_name='여러분 안녕하세요'))
     assert json_matcher.match('field_name:/안녕/i', dict(field_name='여러분 안녕하세요'))
-    assert json_matcher.match('field_name:/안녕\//i', dict(field_name='여러분 안녕/하세요'))
+    assert json_matcher.match('field_name:/안녕\\//i', dict(field_name='여러분 안녕/하세요'))
 
     assert not json_matcher.match('field_name:a{1,3}b', dict(field_name='aab'))
     assert json_matcher.match('field_name:/a{1,3}b/i', dict(field_name='aab'))
