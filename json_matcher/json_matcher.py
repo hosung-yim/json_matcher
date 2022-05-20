@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 
 import collections
 import ast
+import fnmatch
 import numbers
 import re
 from six import string_types
@@ -77,10 +78,10 @@ class TextMatcher(BaseMatcher):
     def __init__(self, value):
         self.value = value.value
         self.pattern = None
-        self.string_only = False
+        self.quoted = False
 
         if isinstance(value, QuotedString):
-            self.string_only = True
+            self.quoted = True
         elif isinstance(value, RQuotedString):
             options = value.options
             flags = 0
@@ -93,7 +94,7 @@ class TextMatcher(BaseMatcher):
 
     def eval_one(self, input_value, context):
         # input_value 가 숫자형태인 경우 Int/Float 변환을 통한 매치를 우선 시도한다.
-        if not self.string_only and isinstance(input_value, numbers.Number):
+        if not self.quoted and isinstance(input_value, numbers.Number):
             try:
                 return int(self.value) == int(input_value)
             except ValueError:
@@ -109,6 +110,8 @@ class TextMatcher(BaseMatcher):
 
         if self.pattern:
             return self.pattern.search(input_value)
+        if '*' in self.value or '?' in self.value:
+            return fnmatch.fnmatch(input_value, self.value)
         return self.value in input_value
 
     def get_value(self):

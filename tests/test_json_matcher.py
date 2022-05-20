@@ -151,3 +151,62 @@ def test_match_result():
     assert len(l) == 2
     assert l[0] == ('A', '안녕')
     assert l[1] == ('B', '세상아')
+
+
+def test_field_has_data_with_wildcard():
+    matcher = json_matcher.compile('field : *')
+    has_field = dict(field='value')
+    r = matcher.match(has_field)
+    l = r.groups()
+    assert len(l) == 1
+
+    has_field_with_empty_list = dict(field=[])
+    r = matcher.match(has_field_with_empty_list)
+    assert not r
+
+    has_field_with_list = dict(field=['value'])
+    r = matcher.match(has_field_with_list)
+    l = r.groups()
+    assert len(l) == 1
+
+
+def test_field_match_wildcard():
+    postwhildcard_matcher = json_matcher.compile('field : value*')
+
+    r = postwhildcard_matcher.match(dict(field='value1'))
+    l = r.groups()
+    assert len(l) == 1
+
+    r = postwhildcard_matcher.match(dict(field='xvalue1'))
+    assert not r
+
+    leadingwhildcard_matcher = json_matcher.compile('field : *value')
+
+    r = leadingwhildcard_matcher.match(dict(field='value'))
+    l = r.groups()
+    assert len(l) == 1
+
+    r = leadingwhildcard_matcher.match(dict(field='this is value'))
+    l = r.groups()
+    assert len(l) == 1
+
+    r = leadingwhildcard_matcher.match(dict(field='this is not value1'))
+    assert not r
+
+    multiplewhildcard_matcher = json_matcher.compile('field : *value*')
+    r = multiplewhildcard_matcher.match(dict(field='value'))
+    l = r.groups()
+    assert len(l) == 1
+
+    r = multiplewhildcard_matcher.match(dict(field='this is value'))
+    l = r.groups()
+    assert len(l) == 1
+
+    r = multiplewhildcard_matcher.match(dict(field='this is value. and more text'))
+    l = r.groups()
+    assert len(l) == 1
+
+    multiplewhildcard_matcher2 = json_matcher.compile('field : *val*ue*')
+    r = multiplewhildcard_matcher2.match(dict(field='valuuuuuuuuuuuuue'))
+    l = r.groups()
+    assert len(l) == 1
