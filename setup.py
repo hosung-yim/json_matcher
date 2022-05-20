@@ -1,12 +1,12 @@
 #!/usr/env/bin python
-#-*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import os
 import setuptools
 
 module_path = os.path.join(os.path.dirname(__file__), 'json_matcher/__init__.py')
 
 # scripts
-scripts = [ 'bin/json_match', 'bin/jrep' ]
+scripts = ['bin/json_match', 'bin/jrep']
 
 # packages
 packages = setuptools.find_packages(exclude=['tests'])
@@ -27,7 +27,7 @@ setuptools.setup(
     packages=packages,
     platforms='any',
 
-    install_requires=[ 'pydash', 'pyparsing', 'six' ],
+    install_requires=['pydash', 'pyparsing', 'six'],
 
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
