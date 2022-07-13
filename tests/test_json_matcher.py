@@ -106,6 +106,8 @@ def test_exists():
 def test_expression():
     assert json_matcher.match('_expr_:"A+B>10"', dict(A=10,B=20))
     assert json_matcher.match('_expr_:"A.B+B.C>10"', dict(A=dict(B=10),B=dict(C=20)))
+    assert not json_matcher.match('_expr_:"A.B+B.C>10"', dict(B=dict(C=20)))
+    assert not json_matcher.match('_expr_:"A.B+B.C>10"', dict(A=dict(B="A"),B=dict(C=20)))
 
 
 def test_nested_field():
@@ -168,6 +170,12 @@ def test_field_has_data_with_wildcard():
     r = matcher.match(has_field_with_list)
     l = r.groups()
     assert len(l) == 1
+
+    has_no_field = dict(no_field='value')
+    r = matcher.match(has_no_field)
+    assert not r
+
+
 
 
 def test_field_match_wildcard():

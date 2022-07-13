@@ -9,14 +9,15 @@ import fnmatch
 import numbers
 import re
 from six import string_types
-
+import pydash
 import pyparsing as pp
+
 pp.ParserElement.enablePackrat()
 
-import  pydash
 
 class JsonMatcherBaseException(Exception):
     pass
+
 
 class JsonMatcherParseException(JsonMatcherBaseException):
     def __init__(self, original_exception):
@@ -38,13 +39,13 @@ def flat_nested_object(o, pathes=None, depth=0, max_depth=10):
         pathes = []
     if isinstance(o, list):
         for idx, item in enumerate(o):
-            new_pathes = pathes + [ '[{}]'.format(idx) ]
-            for name, value in flat_nested_object(item, new_pathes, depth+1, max_depth):
+            new_pathes = pathes + ['[{}]'.format(idx)]
+            for name, value in flat_nested_object(item, new_pathes, depth + 1, max_depth):
                 yield name, value
     elif isinstance(o, dict):
         for inner_key, inner_value in o.items():
-            new_pathes = pathes + [ '.{}'.format(inner_key) ]
-            for name, value in flat_nested_object(inner_value, new_pathes, depth+1, max_depth):
+            new_pathes = pathes + ['.{}'.format(inner_key)]
+            for name, value in flat_nested_object(inner_value, new_pathes, depth + 1, max_depth):
                 yield name, value
     else:
         name = ''.join(pathes)
@@ -57,10 +58,10 @@ def flat_nested_object(o, pathes=None, depth=0, max_depth=10):
 # list / dictionary 가 입력되는 경우 nested 된 객체를 풀어서 접근한다.
 class BaseMatcher:
     def __getitem__(self, key):
-        '''XXX: python2 에서 [0] 과 같은 접근은 __getitem__ 이 발생하는데, Python3 에서는 TypeError 가 발생
+        """XXX: python2 에서 [0] 과 같은 접근은 __getitem__ 이 발생하는데, Python3 에서는 TypeError 가 발생
                 pyparsing 에서 현재 특정 영역에서 AttributeError 를 처리하지 않아서 제대로 처리되지 않아
                 일단 TypeError 를 발생하도록 우회
-        '''
+        """
         raise TypeError
 
     def eval(self, input_value, context):
@@ -229,6 +230,8 @@ class TermMatcher:
 
     def eval(self, context):
         input_value = context.get(self.field_name)
+        if not input_value:
+            return False
         r = self.field_value.eval(input_value, context)
         if r:
             context.add_result((self.field_name, input_value))
@@ -251,6 +254,9 @@ class DictOrObject:
     def __getattr__(self, name):
         return self[name]
 
+    def __repr__(self):
+        return str(self.v)
+
 
 class ExpressionMatcher:
     def __init__(self, expression):
@@ -266,9 +272,10 @@ class ExpressionMatcher:
         try:
             local = DictOrObject(context.get_dict())
             ret = eval(self.compiled, {}, local)
+        except (AttributeError, TypeError):
+            return False
         except Exception as e:
             raise e
-            ret = False
         return ret
 
 
@@ -333,7 +340,6 @@ def build_binary_matcher(l, class_object):
         op_ = class_object(left, right)
         left = op_
     return op_
-
 
 
 class MatchContext:
@@ -457,7 +463,7 @@ IMPLICIT_AND = 1 << 1
 
 
 def compile(expression, flags=0):
-    '''compile lucene like query'''
+    """compile lucene like query"""
     implicit_bin_op = 'AND'
     if flags & IMPLICIT_OR:
         implicit_bin_op = 'OR'
@@ -467,11 +473,11 @@ def compile(expression, flags=0):
 
 
 def match(expression, j, flags=0):
-    '''match json with lucene like query'''
+    """match json with lucene like query"""
     matcher = compile(expression, flags)
     return matcher.match(j)
 
 
-__all__ = ['compile', 'match', 
-        'JsonMatcher', 'MatchContext', 'JsonMatchResult',
-        'IMPLICIT_OR', 'IMPLICIT_AND' ]
+__all__ = ['compile', 'match',
+           'JsonMatcher', 'MatchContext', 'JsonMatchResult',
+           'IMPLICIT_OR', 'IMPLICIT_AND']
