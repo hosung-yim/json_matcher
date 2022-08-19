@@ -384,9 +384,10 @@ class MatchContext:
             return field_name
 
         while True:
-            if len(field_name.rsplit("." , 1)) == 1:
+            split = field_name.rsplit("." , 1)
+            if len(split) == 1 and split[0] != '':
                 return None
-            field_name = field_name.rsplit("." , 1)[0]
+            field_name = split[0]
             if pydash.has(j , field_name):
                 break
         return field_name
@@ -397,7 +398,7 @@ class MatchContext:
         # if the field name is *, then get list of all recursive values
         if field_name == "*":
             return list(self.DictToValues(j))
-    
+
         # if the field name start with * (like *.name), then run self.get on all sub values
         if field_name.startswith("*.") and (isinstance(j , list) or isinstance(j , dict)):
             values = [self.get(field_name.lstrip("*.") , j , default)]
@@ -415,10 +416,11 @@ class MatchContext:
         else:
             # get the longest path exists in the dict
             new_field_name = self.find_longest_existing_path(field_name , j)
-            
             new_value = pydash.get(j , new_field_name)
             if isinstance( new_value , list ) and len(new_value) and isinstance(new_value[0] , dict):
                 return [self.get(field_name.lstrip(new_field_name)[1:] , nv , default) for nv in new_value]
+            elif isinstance(new_value , dict):
+                return self.get(field_name.lstrip(new_field_name)[1:] , new_value)
 
         return default 
 
