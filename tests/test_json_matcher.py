@@ -11,11 +11,11 @@ import json_matcher
 
 def test_compile_text_term():
     assert json_matcher.compile('field_name:안녕')
-    assert json_matcher.match('field_name:안녕', dict(field_name='여러분 안녕하세요'))
+    assert json_matcher.match('field_name:*안녕*', dict(field_name='여러분 안녕하세요'))
 
-    assert json_matcher.match('field_name:"안녕"', dict(field_name='여러분 안녕하세요'))
-    assert json_matcher.match('field_name:/안녕/i', dict(field_name='여러분 안녕하세요'))
-    assert json_matcher.match('field_name:/안녕\\//i', dict(field_name='여러분 안녕/하세요'))
+    assert json_matcher.match('field_name:"*안녕*"', dict(field_name='여러분 안녕하세요'))
+    assert json_matcher.match('field_name:/.*안녕.*/i', dict(field_name='여러분 안녕하세요'))
+    assert json_matcher.match('field_name:/.*안녕\\/.*/i', dict(field_name='여러분 안녕/하세요'))
 
     assert not json_matcher.match('field_name:a{1,3}b', dict(field_name='aab'))
     assert json_matcher.match('field_name:/a{1,3}b/i', dict(field_name='aab'))
@@ -66,7 +66,7 @@ def test_integer_field_match():
 
 def test_compile_multiple_term():
     assert json_matcher.compile('field_name:(안녕 세상아 반갑다)')
-    assert json_matcher.match('field_name:(안녕 "세상아" 반갑다)', dict(field_name='안녕 세상아 반갑다. 진짜로'))
+    assert json_matcher.match('field_name:(*안녕* "*세상아*" *반갑다*)', dict(field_name='안녕 세상아 반갑다. 진짜로'))
     assert not json_matcher.match('field_name:(안녕 "세상아" a{1,3}b)', dict(field_name='ab'))
     assert json_matcher.match('field_name:(안녕 "세상아" /a{1,3}b/)', dict(field_name='ab'))
 
@@ -93,7 +93,7 @@ def test_with_list():
     assert not json_matcher.match('field_name:[10 TO 30]', dict(field_name=[1,2,3,4,5,6]))
     assert json_matcher.match('field_name:<10', dict(field_name=[11, 20, 30, 5, 30]))
     assert not json_matcher.match('field_name:<10', dict(field_name=[11, 20, 30]))
-    assert json_matcher.match('field_name:(안녕 "세상아" 반갑다)', dict(field_name=dict(B=['이건아님', '안녕 세상아 반갑다. 진짜로'])))
+    assert json_matcher.match('field_name:(*안녕* "*세상아*" *반갑다*)', dict(field_name=dict(B=['이건아님', '안녕 세상아 반갑다. 진짜로'])))
     assert not json_matcher.match('field_name:(안녕 "세상아" 반갑다)', dict(field_name=['A', 'B', 'C']))
 
 
@@ -218,3 +218,63 @@ def test_field_match_wildcard():
     r = multiplewhildcard_matcher2.match(dict(field='valuuuuuuuuuuuuue'))
     l = r.groups()
     assert len(l) == 1
+
+
+
+
+
+def test_list_of_jsons():
+    matcher = json_matcher.compile("field.subfield:value")
+    r = matcher.match(dict(field=[dict(subfield="value")]))
+    l = r.groups()
+    assert len(l) == 1
+    
+def test_special_char_in_field():
+    matcher = json_matcher.compile("@id:30")
+    
+    r = matcher.match({"@id" : 30})
+    l = r.groups()
+    assert len(l) == 1
+    
+
+def test_wildcard_in_field():
+    matcher = json_matcher.compile("field.*.target:value")
+    
+    r = matcher.match({'field': {'subfield': {'target': 'value'}}})
+    print(dict(field=dict(subfield=dict(target="value"))))
+    assert r is not None
+    l = r.groups()
+    assert len(l) == 1
+    
+
+    matcher = json_matcher.compile("*.target:value")
+    
+    r = matcher.match(dict(field=dict(subfield=dict(target="value"))))
+    l = r.groups()
+    assert len(l) == 1
+
+    matcher = json_matcher.compile("field.*:value")
+    
+    r = matcher.match(dict(field=dict(subfield=dict(target="value"))))
+    l = r.groups()
+    assert len(l) == 1
+    
+
+
+def test_equal_contains():
+
+    matcher = json_matcher.compile("field:equal")
+    
+    r = matcher.match(dict(field='equal'))
+    l = r.groups()
+    assert len(l) == 1
+    
+
+    matcher = json_matcher.compile("field:*contains*")
+    
+    r = matcher.match(dict(field='contains'))
+    l = r.groups()
+    assert len(l) == 1
+    
+
+
