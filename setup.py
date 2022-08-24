@@ -13,9 +13,9 @@ packages = setuptools.find_packages(exclude=['tests'])
 
 setuptools.setup(
     name="json_matcher",
-    version="0.0.5",
+    version="0.0.6",
     url="https://github.com/hosung-yim/json_matcher",
-    dowload_url="https://github.com/hosung-yim/json_matcher/archive/refs/tags/0.0.5.tar.gz",
+    dowload_url="https://github.com/hosung-yim/json_matcher/archive/refs/tags/0.0.6.tar.gz",
 
     author="Greg.YIM",
     author_email="greg.yim@kakaocorp.com",
@@ -30,7 +30,7 @@ setuptools.setup(
     install_requires=['pydash', 'pyparsing', 'six'],
 
     classifiers=[
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
