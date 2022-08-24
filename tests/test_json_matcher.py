@@ -3,9 +3,6 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import sys
-import json
-
 import json_matcher
 
 
@@ -14,8 +11,8 @@ def test_compile_text_term():
     assert json_matcher.match('field_name:*안녕*', dict(field_name='여러분 안녕하세요'))
 
     assert json_matcher.match('field_name:"*안녕*"', dict(field_name='여러분 안녕하세요'))
-    assert json_matcher.match('field_name:/.*안녕.*/i', dict(field_name='여러분 안녕하세요'))
-    assert json_matcher.match('field_name:/.*안녕\\/.*/i', dict(field_name='여러분 안녕/하세요'))
+    assert json_matcher.match('field_name:/안녕/i', dict(field_name='여러분 안녕하세요'))
+    assert json_matcher.match('field_name:/안녕\\//i', dict(field_name='여러분 안녕/하세요'))
 
     assert not json_matcher.match('field_name:a{1,3}b', dict(field_name='aab'))
     assert json_matcher.match('field_name:/a{1,3}b/i', dict(field_name='aab'))
@@ -55,7 +52,13 @@ def test_compile_operate_term():
     # input str     value number(str)
     assert json_matcher.match('field_name:>=10', dict(field_name="10"))
 
-    d = {"red": "{\"res\":false,\"subs\":[\"https://0-142k.tistory.com/api\"],\"mains\":[\"https://0-142k.tistory.com/\"],\"time\":2795,\"dest\":\"https://0-142k.tistory.com/?q=%EB%8D%B0%EC%96%B4%20%EB%8D%B0%EB%B8%94%20%EB%8B%A4%EC%8B%9C%EB%B3%B4%EA%B8%B0%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C\",\"begin\":\"http://0-142k.tistory.com/\",\"timeout\":false}", "dest_url": "https://0-142k.tistory.com/?q=%EB%8D%B0%EC%96%B4%20%EB%8D%B0%EB%B8%94%20%EB%8B%A4%EC%8B%9C%EB%B3%B4%EA%B8%B0%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C", "docid": "12VYGYuncxK4v1nFSx", "service": "tistoryall", "start_url": "http://0-142k.tistory.com/", "dest_sld": "0-142k.tistory.com", "dest_host": "0-142k.tistory.com", "title": "\ub370\uc5b4 \ub370\ube14 \ub2e4\uc2dc\ubcf4\uae30 \ub2e4\uc6b4\ub85c\ub4dc", "userid": "3338219", "inserted_at": "2020-01-28T12:17:50"}
+    d = {
+        "red": "{\"res\":false,\"subs\":[\"https://0-142k.tistory.com/api\"],\"mains\":[\"https://0-142k.tistory.com/\"],\"time\":2795,\"dest\":\"https://0-142k.tistory.com/?q=%EB%8D%B0%EC%96%B4%20%EB%8D%B0%EB%B8%94%20%EB%8B%A4%EC%8B%9C%EB%B3%B4%EA%B8%B0%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C\",\"begin\":\"http://0-142k.tistory.com/\",\"timeout\":false}",
+        "dest_url": "https://0-142k.tistory.com/?q=%EB%8D%B0%EC%96%B4%20%EB%8D%B0%EB%B8%94%20%EB%8B%A4%EC%8B%9C%EB%B3%B4%EA%B8%B0%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C",
+        "docid": "12VYGYuncxK4v1nFSx", "service": "tistoryall", "start_url": "http://0-142k.tistory.com/",
+        "dest_sld": "0-142k.tistory.com", "dest_host": "0-142k.tistory.com",
+        "title": "\ub370\uc5b4 \ub370\ube14 \ub2e4\uc2dc\ubcf4\uae30 \ub2e4\uc6b4\ub85c\ub4dc", "userid": "3338219",
+        "inserted_at": "2020-01-28T12:17:50"}
     assert json_matcher.match('inserted_at:>"2020-01-28T12:17:49"', d)
 
 
@@ -75,13 +78,13 @@ def test_compile_nested_par():
     assert json_matcher.compile('((A:안녕 && B:세상아) C:반갑다)')
 
     assert json_matcher.compile('((A:안녕 AND B:세상아) AND C:반갑다)')
-    assert json_matcher.match('((A:안녕 AND B:세상아) AND C:반갑다)', dict(A='안녕',B='세상아',C='반갑다'))
-    assert not json_matcher.match('((A:안녕 AND B:세상아) AND C:반갑다)', dict(A='안녕',B='세상아'))
+    assert json_matcher.match('((A:안녕 AND B:세상아) AND C:반갑다)', dict(A='안녕', B='세상아', C='반갑다'))
+    assert not json_matcher.match('((A:안녕 AND B:세상아) AND C:반갑다)', dict(A='안녕', B='세상아'))
 
 
 def test_default_and():
-    assert json_matcher.match('A:안녕 B:세상아 C:반갑다', dict(A='안녕',B='세상아',C='반갑다'))
-    assert not json_matcher.match('A:안녕 B:세상아 C:반갑다', dict(A='Y',B='세상아',C='반갑다'))
+    assert json_matcher.match('A:안녕 B:세상아 C:반갑다', dict(A='안녕', B='세상아', C='반갑다'))
+    assert not json_matcher.match('A:안녕 B:세상아 C:반갑다', dict(A='Y', B='세상아', C='반갑다'))
 
 
 def test_with_list():
@@ -89,8 +92,8 @@ def test_with_list():
     assert json_matcher.match('A:안녕', dict(A=dict(B=['안녕', '세상아', '반갑다'])))
     assert json_matcher.match('A:안녕', dict(A=dict(A_=dict(B=['안녕', '세상아', '반갑다']))))
 
-    assert json_matcher.match('field_name:[10 TO 30]', dict(field_name=[1,2,3,4,5,20]))
-    assert not json_matcher.match('field_name:[10 TO 30]', dict(field_name=[1,2,3,4,5,6]))
+    assert json_matcher.match('field_name:[10 TO 30]', dict(field_name=[1, 2, 3, 4, 5, 20]))
+    assert not json_matcher.match('field_name:[10 TO 30]', dict(field_name=[1, 2, 3, 4, 5, 6]))
     assert json_matcher.match('field_name:<10', dict(field_name=[11, 20, 30, 5, 30]))
     assert not json_matcher.match('field_name:<10', dict(field_name=[11, 20, 30]))
     assert json_matcher.match('field_name:(*안녕* "*세상아*" *반갑다*)', dict(field_name=dict(B=['이건아님', '안녕 세상아 반갑다. 진짜로'])))
@@ -104,10 +107,10 @@ def test_exists():
 
 
 def test_expression():
-    assert json_matcher.match('_expr_:"A+B>10"', dict(A=10,B=20))
-    assert json_matcher.match('_expr_:"A.B+B.C>10"', dict(A=dict(B=10),B=dict(C=20)))
+    assert json_matcher.match('_expr_:"A+B>10"', dict(A=10, B=20))
+    assert json_matcher.match('_expr_:"A.B+B.C>10"', dict(A=dict(B=10), B=dict(C=20)))
     assert not json_matcher.match('_expr_:"A.B+B.C>10"', dict(B=dict(C=20)))
-    assert not json_matcher.match('_expr_:"A.B+B.C>10"', dict(A=dict(B="A"),B=dict(C=20)))
+    assert not json_matcher.match('_expr_:"A.B+B.C>10"', dict(A=dict(B="A"), B=dict(C=20)))
 
 
 def test_nested_field():
@@ -176,8 +179,6 @@ def test_field_has_data_with_wildcard():
     assert not r
 
 
-
-
 def test_field_match_wildcard():
     postwhildcard_matcher = json_matcher.compile('field : value*')
 
@@ -220,61 +221,65 @@ def test_field_match_wildcard():
     assert len(l) == 1
 
 
-
-
-
 def test_list_of_jsons():
     matcher = json_matcher.compile("field.subfield:value")
     r = matcher.match(dict(field=[dict(subfield="value")]))
     l = r.groups()
     assert len(l) == 1
-    
+
+
 def test_special_char_in_field():
     matcher = json_matcher.compile("@id:30")
-    
-    r = matcher.match({"@id" : 30})
+
+    r = matcher.match({"@id": 30})
     l = r.groups()
     assert len(l) == 1
-    
+
 
 def test_wildcard_in_field():
     matcher = json_matcher.compile("field.*.target:value")
-    
+
     r = matcher.match({'field': {'subfield': {'target': 'value'}}})
     print(dict(field=dict(subfield=dict(target="value"))))
     assert r is not None
     l = r.groups()
     assert len(l) == 1
-    
 
     matcher = json_matcher.compile("*.target:value")
-    
+
     r = matcher.match(dict(field=dict(subfield=dict(target="value"))))
     l = r.groups()
     assert len(l) == 1
 
     matcher = json_matcher.compile("field.*:value")
-    
+
     r = matcher.match(dict(field=dict(subfield=dict(target="value"))))
     l = r.groups()
     assert len(l) == 1
-    
 
 
 def test_equal_contains():
-
     matcher = json_matcher.compile("field:equal")
-    
+
     r = matcher.match(dict(field='equal'))
     l = r.groups()
     assert len(l) == 1
-    
 
     matcher = json_matcher.compile("field:*contains*")
-    
+
     r = matcher.match(dict(field='contains'))
     l = r.groups()
     assert len(l) == 1
-    
 
 
+def test_equal_continas_option():
+    matcher = json_matcher.compile("field:equal", json_matcher.TERM_MATCH_EQUAL)
+
+    r = matcher.match(dict(field='This is text for equal'))
+    assert not r
+
+    matcher = json_matcher.compile("field:equal", json_matcher.TERM_MATCH_CONTAIN)
+
+    r = matcher.match(dict(field='This is text for equal'))
+    l = r.groups()
+    assert len(l) == 1

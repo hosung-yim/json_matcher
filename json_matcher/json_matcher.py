@@ -13,6 +13,12 @@ import pydash
 import pyparsing as pp
 import itertools
 
+IMPLICIT_BIN_OP_AND = 'AND'
+IMPLICIT_BIN_OP_OR = 'OR'
+TERM_MATCH_OP_EQUAL = 'EQUAL'
+TERM_MATCH_OP_CONTAIN = 'CONTAIN'
+
+
 pp.ParserElement.enablePackrat()
 
 
@@ -78,7 +84,8 @@ class BaseMatcher:
 
 
 class TextMatcher(BaseMatcher):
-    def __init__(self, value):
+    def __init__(self, value, term_match_op=TERM_MATCH_OP_EQUAL):
+        self.term_match_op = term_match_op
         self.value = value.value
         self.pattern = None
         self.quoted = False
@@ -113,7 +120,11 @@ class TextMatcher(BaseMatcher):
             return self.pattern.search(input_value)
         if '*' in self.value or '?' in self.value:
             return fnmatch.fnmatch(input_value, self.value)
-        return self.value == input_value
+
+        if self.term_match_op == TERM_MATCH_OP_CONTAIN:
+            return self.value in input_value
+        else:
+            return self.value == input_value
 
     def get_value(self):
         return self.value
@@ -350,10 +361,10 @@ class MatchContext:
         self.j = j
         self.result = []
 
-    def exists(self, name ,j=None):
+    def exists(self, name, j=None):
         j = self.j if j is None else j
-        v = self.get(name , j, self._contains_dummy_default_object)
-        if isinstance(v , list):
+        v = self.get(name, j, self._contains_dummy_default_object)
+        if isinstance(v, list):
             for i in list(self.NestedListToList(v)):
                 if i is not self._contains_dummy_default_object:
                     return True
@@ -365,34 +376,36 @@ class MatchContext:
     # this function convert list of lists recursively to list
     def NestedListToList(self, l):
         for i in l:
-            if isinstance(i , list):
-                yield from self.NestedListToList(i)
+            if isinstance(i, list):
+                for j in self.NestedListToList(i):
+                    yield j
             else:
                 yield i
 
     # this function convert dict object values recursively to list
     def DictToValues(self, j):
         for v in j.values():
-            if isinstance(v , dict):
-                yield from self.DictToValues(v)
+            if isinstance(v, dict):
+                for j in self.DictToValues(v):
+                    yield j
             else:
                 yield v
-    
+
     # find the longest path exists in the json
-    def find_longest_existing_path(self, field_name , j):
-        if pydash.has(j , field_name):
+    def find_longest_existing_path(self, field_name, j):
+        if pydash.has(j, field_name):
             return field_name
 
         while True:
-            split = field_name.rsplit("." , 1)
+            split = field_name.rsplit(".", 1)
             if len(split) == 1 and split[0] != '':
                 return None
             field_name = split[0]
-            if pydash.has(j , field_name):
+            if pydash.has(j, field_name):
                 break
         return field_name
-            
-    def get(self, field_name , j=None, default=''):
+
+    def get(self, field_name, j=None, default=''):
         j = self.j if j is None else j
 
         # if the field name is *, then get list of all recursive values
@@ -400,30 +413,28 @@ class MatchContext:
             return list(self.DictToValues(j))
 
         # if the field name start with * (like *.name), then run self.get on all sub values
-        if field_name.startswith("*.") and (isinstance(j , list) or isinstance(j , dict)):
-            values = [self.get(field_name.lstrip("*.") , j , default)]
+        if field_name.startswith("*.") and (isinstance(j, list) or isinstance(j, dict)):
+            values = [self.get(field_name.lstrip("*."), j, default)]
             for v in j.values():
-                if isinstance(v , list):
+                if isinstance(v, list):
                     for i in v:
-                        values.append(self.get(field_name , i , default))
-                if isinstance(v , dict):
-                    values.append(self.get(field_name , v , default))
+                        values.append(self.get(field_name, i, default))
+                if isinstance(v, dict):
+                    values.append(self.get(field_name, v, default))
             return values
 
-
-        if pydash.has(j , field_name):
-            return pydash.get(j , field_name ) 
+        if pydash.has(j, field_name):
+            return pydash.get(j, field_name)
         else:
             # get the longest path exists in the dict
-            new_field_name = self.find_longest_existing_path(field_name , j)
-            new_value = pydash.get(j , new_field_name)
-            if isinstance( new_value , list ) and len(new_value) and isinstance(new_value[0] , dict):
-                return [self.get(field_name.lstrip(new_field_name)[1:] , nv , default) for nv in new_value]
-            elif isinstance(new_value , dict):
-                return self.get(field_name.lstrip(new_field_name)[1:] , new_value)
+            new_field_name = self.find_longest_existing_path(field_name, j)
+            new_value = pydash.get(j, new_field_name)
+            if isinstance(new_value, list) and len(new_value) and isinstance(new_value[0], dict):
+                return [self.get(field_name.lstrip(new_field_name)[1:], nv, default) for nv in new_value]
+            elif isinstance(new_value, dict):
+                return self.get(field_name.lstrip(new_field_name)[1:], new_value)
 
-        return default 
-
+        return default
 
     def get_dict(self):
         return self.j
@@ -438,7 +449,7 @@ class MatchContext:
 #
 # Grammar
 #
-def get_parser(implicit_bin_op='AND'):
+def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_EQUAL):
     COLON, LBRACK, RBRACK, LBRACE, RBRACE, TILDE, CARAT = map(pp.Literal, ':[]{}~^')
     LPAR, RPAR = map(pp.Suppress, '()')
     AND_, OR_, NOT_, TO_ = map(pp.CaselessKeyword, 'AND OR NOT TO'.split())
@@ -454,7 +465,7 @@ def get_parser(implicit_bin_op='AND'):
     rquoted_string = (pp.QuotedString('/', escChar='\\', escQuote='\\/') + pp.Optional(pp.Regex(r'[i]'))) \
             .setParseAction(lambda t: RQuotedString(t[0], t[1]) if len(t) == 2 else RQuotedString(t[0], ''))
 
-    field_text_value = (quoted_string | rquoted_string | valid_text )('text_field_value').setParseAction(lambda t: TextMatcher(t[0]))
+    field_text_value = (quoted_string | rquoted_string | valid_text )('text_field_value').setParseAction(lambda t: TextMatcher(t[0], term_match_op))
 
     field_operate_value = ((LTE | LT | GTE | GT | EQ) + (valid_text | quoted_string))('operate_field_value').setParseAction(lambda t: Operator(t[0], t[1]))
 
@@ -476,7 +487,7 @@ def get_parser(implicit_bin_op='AND'):
     term << (field_term | pp.Group(LPAR + expression + RPAR).setParseAction(lambda t: t[0]))
 
     not_expression = ((NOT_ | '!').setParseAction(lambda: "NOT"), 1, pp.opAssoc.RIGHT, lambda t: NotMatcher(t[0][1]))
-    if implicit_bin_op == 'AND':
+    if implicit_bin_op == IMPLICIT_BIN_OP_AND:
         and_expression = (pp.Optional(AND_ | '&&').setParseAction(lambda: "AND"), 2, pp.opAssoc.LEFT, lambda t: build_binary_matcher(t[0], AndMatcher))
         or_expression = ((OR_ | '||').setParseAction(lambda: "OR"), 2, pp.opAssoc.LEFT, lambda t: build_binary_matcher(t[0], OrMatcher))
     else:
@@ -486,16 +497,18 @@ def get_parser(implicit_bin_op='AND'):
     return expression
 
 
-EXPRESSION_PARSER_IMPLICIT_OR = get_parser('OR')
-EXPRESSION_PARSER_IMPLICIT_AND = get_parser('AND')
+PREBUILT_PARSERS = {}
+for bin_op in [IMPLICIT_BIN_OP_OR, IMPLICIT_BIN_OP_AND]:
+    PREBUILT_PARSERS[bin_op] = {}
+    for match_op in [TERM_MATCH_OP_EQUAL, TERM_MATCH_OP_CONTAIN]:
+        PREBUILT_PARSERS[bin_op][match_op] = get_parser(bin_op, match_op)
 
 
-def build_matcher(expr, implicit_bin_op='AND'):
-    if implicit_bin_op == 'AND':
-        expression = EXPRESSION_PARSER_IMPLICIT_AND
-    else:
-        expression = EXPRESSION_PARSER_IMPLICIT_OR
+def build_matcher(expr, implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_EQUAL):
+    if implicit_bin_op not in PREBUILT_PARSERS or term_match_op not in PREBUILT_PARSERS[implicit_bin_op]:
+        raise ValueError('No parser for ({}, {})'.format(implicit_bin_op, term_match_op))
 
+    expression = PREBUILT_PARSERS[implicit_bin_op][term_match_op]
     matcher, = expression.parseString(expr, parseAll=True)
     return matcher
 
@@ -512,9 +525,9 @@ class JsonMatchResult:
 
 
 class JsonMatcher():
-    def __init__(self, expression, implicit_bin_op='AND'):
+    def __init__(self, expression, implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_EQUAL):
         try:
-            self.matcher = build_matcher(expression, implicit_bin_op)
+            self.matcher = build_matcher(expression, implicit_bin_op, term_match_op)
         except pp.ParseBaseException as e:
             raise JsonMatcherParseException(e)
 
@@ -527,18 +540,38 @@ class JsonMatcher():
 
 
 # Flags
-IMPLICIT_OR  = 1 << 0
+IMPLICIT_OR = 1 << 0
 IMPLICIT_AND = 1 << 1
+TERM_MATCH_EQUAL = 1 << 2
+TERM_MATCH_CONTAIN = 1 << 3
+
+
+default_term_match_op = TERM_MATCH_OP_EQUAL
+
+
+def set_default_term_match_op(term_match_option):
+    global default_term_match_op
+    if term_match_option == TERM_MATCH_EQUAL:
+        default_term_match_op = TERM_MATCH_OP_EQUAL
+    if term_match_option == TERM_MATCH_CONTAIN:
+        default_term_match_op = TERM_MATCH_OP_CONTAIN
 
 
 def compile(expression, flags=0):
     """compile lucene like query"""
-    implicit_bin_op = 'AND'
+    implicit_bin_op = IMPLICIT_BIN_OP_AND
     if flags & IMPLICIT_OR:
-        implicit_bin_op = 'OR'
+        implicit_bin_op = IMPLICIT_BIN_OP_OR
     if flags & IMPLICIT_AND:
-        implicit_bin_op = 'AND'
-    return JsonMatcher(expression, implicit_bin_op)
+        implicit_bin_op = IMPLICIT_BIN_OP_AND
+
+    term_match_op = default_term_match_op
+    if flags & TERM_MATCH_CONTAIN:
+        term_match_op = TERM_MATCH_OP_CONTAIN
+    if flags & TERM_MATCH_EQUAL:
+        term_match_op = TERM_MATCH_OP_EQUAL
+
+    return JsonMatcher(expression, implicit_bin_op, term_match_op)
 
 
 def match(expression, j, flags=0):
@@ -549,4 +582,4 @@ def match(expression, j, flags=0):
 
 __all__ = ['compile', 'match',
            'JsonMatcher', 'MatchContext', 'JsonMatchResult',
-           'IMPLICIT_OR', 'IMPLICIT_AND']
+           'IMPLICIT_OR', 'IMPLICIT_AND', 'TERM_MATCH_EQUAL', 'TERM_MATCH_CONTAIN']
