@@ -87,17 +87,10 @@ class TextMatcher(BaseMatcher):
     def __init__(self, value, term_match_op=TERM_MATCH_OP_EQUAL):
         self.term_match_op = term_match_op
         self.value = value.value
-        self.pattern = None
         self.quoted = False
 
         if isinstance(value, QuotedString):
             self.quoted = True
-        elif isinstance(value, RQuotedString):
-            options = value.options
-            flags = 0
-            if 'i' in options:
-                flags = flags | re.IGNORECASE
-            self.pattern = re.compile(self.value, flags)
 
     def __repr__(self):
         return 'TextMatcher:{}'.format(self.value)
@@ -116,8 +109,7 @@ class TextMatcher(BaseMatcher):
                 pass
         if not isinstance(input_value, string_types):
             input_value = str(input_value)
-        if self.pattern:
-            return self.pattern.search(input_value)
+
         if '*' in self.value or '?' in self.value:
             return fnmatch.fnmatch(input_value, self.value)
 
@@ -130,9 +122,39 @@ class TextMatcher(BaseMatcher):
         return self.value
 
 
+class RegexpMatcher(BaseMatcher):
+    def __init__(self, value):
+        self.value = value.value
+        self.pattern = None
+
+        options = value.options
+        flags = 0
+        if 'i' in options:
+            flags = flags | re.IGNORECASE
+        self.pattern = re.compile(self.value, flags)
+
+    def __repr__(self):
+        return 'RegexpMatcher:{}'.format(self.value)
+
+    def eval_one(self, input_value, context):
+        if not isinstance(input_value, string_types):
+            input_value = str(input_value)
+        return self.pattern.search(input_value)
+
+    def get_value(self):
+        return self.value
+
+
+def build_text_matcher(value, term_match_op):
+    if isinstance(value, RQuotedString):
+        return RegexpMatcher(value)
+    else:
+        return TextMatcher(value, term_match_op)
+
+
 class MultipleTextMatcher(BaseMatcher):
-    def __init__(self, values):
-        self.matchers = list(map(lambda v: TextMatcher(v), values))
+    def __init__(self, values, term_match_op=TERM_MATCH_OP_EQUAL):
+        self.matchers = list(map(lambda v: build_text_matcher(v, term_match_op), values))
 
     def __repr__(self):
         matchers_text = ','.join(map(lambda t: t.get_value(), self.matchers))
@@ -445,6 +467,9 @@ class MatchContext:
     def get_result(self):
         return self.result
 
+    def match_text(self, input_value, value):
+        pass
+
 
 #
 # Grammar
@@ -465,9 +490,11 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     rquoted_string = (pp.QuotedString('/', escChar='\\', escQuote='\\/') + pp.Optional(pp.Regex(r'[i]'))) \
             .setParseAction(lambda t: RQuotedString(t[0], t[1]) if len(t) == 2 else RQuotedString(t[0], ''))
 
-    field_text_value = (quoted_string | rquoted_string | valid_text )('text_field_value').setParseAction(lambda t: TextMatcher(t[0], term_match_op))
+    field_text_value = (quoted_string | rquoted_string | valid_text )('text_field_value') \
+        .setParseAction(lambda t: build_text_matcher(t[0], term_match_op))
 
-    field_operate_value = ((LTE | LT | GTE | GT | EQ) + (valid_text | quoted_string))('operate_field_value').setParseAction(lambda t: Operator(t[0], t[1]))
+    field_operate_value = ((LTE | LT | GTE | GT | EQ) + (valid_text | quoted_string))('operate_field_value') \
+        .setParseAction(lambda t: Operator(t[0], t[1]))
 
     range_text_value = (pp.Regex(r'([^\s\]\}]+)'))
     incl_range_search = pp.Group(LBRACK + range_text_value + TO_ + range_text_value + RBRACK)
@@ -477,22 +504,40 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     field_range_value = (incl_range_search | excl_range_search)('range_field_value')
 
     multiple_field_text_value = (quoted_string | rquoted_string | valid_text)
-    field_multiple_value = (LPAR + pp.OneOrMore(multiple_field_text_value) + RPAR)('multiple_field_value').setParseAction(lambda t: MultipleTextMatcher(t))
+    field_multiple_value = (LPAR + pp.OneOrMore(multiple_field_text_value) + RPAR)('multiple_field_value') \
+        .setParseAction(lambda t: MultipleTextMatcher(t, term_match_op))
 
     field_name = valid_keyword
     field_value = (field_multiple_value | field_operate_value | field_range_value | field_text_value)
-    field_term = pp.Group(field_name('field_name') + COLON + field_value).setParseAction(lambda t: build_term_matcher(t[0][0], t[0][2]))
+    field_term = pp.Group(field_name('field_name') + COLON + field_value) \
+        .setParseAction(lambda t: build_term_matcher(t[0][0], t[0][2]))
 
     term = pp.Forward()
     term << (field_term | pp.Group(LPAR + expression + RPAR).setParseAction(lambda t: t[0]))
 
     not_expression = ((NOT_ | '!').setParseAction(lambda: "NOT"), 1, pp.opAssoc.RIGHT, lambda t: NotMatcher(t[0][1]))
     if implicit_bin_op == IMPLICIT_BIN_OP_AND:
-        and_expression = (pp.Optional(AND_ | '&&').setParseAction(lambda: "AND"), 2, pp.opAssoc.LEFT, lambda t: build_binary_matcher(t[0], AndMatcher))
-        or_expression = ((OR_ | '||').setParseAction(lambda: "OR"), 2, pp.opAssoc.LEFT, lambda t: build_binary_matcher(t[0], OrMatcher))
+        and_expression = (pp.Optional(AND_ | '&&')
+                          .setParseAction(lambda: "AND"),
+                          2,
+                          pp.opAssoc.LEFT,
+                          lambda t: build_binary_matcher(t[0], AndMatcher))
+        or_expression = ((OR_ | '||')
+                         .setParseAction(lambda: "OR"),
+                         2,
+                         pp.opAssoc.LEFT,
+                         lambda t: build_binary_matcher(t[0], OrMatcher))
     else:
-        and_expression = ((AND_ | '&&').setParseAction(lambda: "AND"), 2, pp.opAssoc.LEFT, lambda t: build_binary_matcher(t[0], AndMatcher))
-        or_expression = (pp.Optional(OR_ | '||').setParseAction(lambda: "OR"), 2, pp.opAssoc.LEFT, lambda t: build_binary_matcher(t[0], OrMatcher))
+        and_expression = ((AND_ | '&&')
+                          .setParseAction(lambda: "AND"),
+                          2,
+                          pp.opAssoc.LEFT,
+                          lambda t: build_binary_matcher(t[0], AndMatcher))
+        or_expression = (pp.Optional(OR_ | '||')
+                         .setParseAction(lambda: "OR"),
+                         2,
+                         pp.opAssoc.LEFT,
+                         lambda t: build_binary_matcher(t[0], OrMatcher))
     expression << pp.infixNotation(term, [ not_expression, and_expression, or_expression, ])
     return expression
 
@@ -504,7 +549,7 @@ for bin_op in [IMPLICIT_BIN_OP_OR, IMPLICIT_BIN_OP_AND]:
         PREBUILT_PARSERS[bin_op][match_op] = get_parser(bin_op, match_op)
 
 
-def build_matcher(expr, implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_EQUAL):
+def build_json_matcher(expr, implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_EQUAL):
     if implicit_bin_op not in PREBUILT_PARSERS or term_match_op not in PREBUILT_PARSERS[implicit_bin_op]:
         raise ValueError('No parser for ({}, {})'.format(implicit_bin_op, term_match_op))
 
@@ -527,12 +572,13 @@ class JsonMatchResult:
 class JsonMatcher():
     def __init__(self, expression, implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_EQUAL):
         try:
-            self.matcher = build_matcher(expression, implicit_bin_op, term_match_op)
+            self.matcher = build_json_matcher(expression, implicit_bin_op, term_match_op)
         except pp.ParseBaseException as e:
             raise JsonMatcherParseException(e)
 
-    def match(self, j):
-        context = MatchContext(j)
+    def match(self, j, context=None):
+        if not context:
+            context = MatchContext(j)
         if self.matcher.eval(context):
             r = JsonMatchResult(context.get_result())
             return r
