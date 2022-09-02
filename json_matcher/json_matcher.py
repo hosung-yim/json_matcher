@@ -471,6 +471,21 @@ class MatchContext:
         pass
 
 
+def escape_regexp_term(tokens):
+    regexp = tokens[0]
+
+    # strip start/end
+    regexp = regexp[1:-1]
+
+    # replace \/ to /
+    regexp = regexp.replace('\\/', '/')
+
+    if len(tokens) == 2:
+        return RQuotedString(regexp, tokens[1])
+    else:
+        return RQuotedString(regexp, '')
+
+
 #
 # Grammar
 #
@@ -487,8 +502,9 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     valid_keyword = pp.Regex(r'[a-zA-Z_*@][a-zA-Z0-9_*@.\[\]]*')
     valid_text = pp.Regex(r'([^\s\)]+)').setParseAction(lambda t: ValidText(t[0]))
     quoted_string = pp.QuotedString('"').setParseAction(lambda t: QuotedString(t[0]))
-    rquoted_string = (pp.QuotedString('/', escChar='\\', escQuote='\\/') + pp.Optional(pp.Regex(r'[i]'))) \
-            .setParseAction(lambda t: RQuotedString(t[0], t[1]) if len(t) == 2 else RQuotedString(t[0], ''))
+    rquoted_string = (pp.QuotedString('/', escChar='\\', escQuote='\\/', unquoteResults=False)
+                      + pp.Optional(pp.Regex(r'[i]'))) \
+            .setParseAction(lambda t: escape_regexp_term(t))
 
     field_text_value = (quoted_string | rquoted_string | valid_text )('text_field_value') \
         .setParseAction(lambda t: build_text_matcher(t[0], term_match_op))
