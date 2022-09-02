@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import print_function, unicode_literals
 
 import collections
 import ast
@@ -9,9 +8,10 @@ import fnmatch
 import numbers
 import re
 from six import string_types
-import pydash
 import pyparsing as pp
-import itertools
+
+from .match_environ import MatchContext
+
 
 IMPLICIT_BIN_OP_AND = 'AND'
 IMPLICIT_BIN_OP_OR = 'OR'
@@ -110,6 +110,15 @@ class TextMatcher(BaseMatcher):
         if not isinstance(input_value, string_types):
             input_value = str(input_value)
 
+        # keyword set 설정이 있는 경우 반영한다.
+        if context.has_keyword_set(self.value):
+            if self.term_match_op == TERM_MATCH_OP_CONTAIN:
+                if context.search_keyword_set(self.value, input_value):
+                    return True
+            else:
+                if context.match_keyword_set(self.value, input_value):
+                    return True
+
         if '*' in self.value or '?' in self.value:
             return fnmatch.fnmatch(input_value, self.value)
 
@@ -139,6 +148,11 @@ class RegexpMatcher(BaseMatcher):
     def eval_one(self, input_value, context):
         if not isinstance(input_value, string_types):
             input_value = str(input_value)
+
+        # keyword set 설정이 있는 경우 반영한다.
+        if context.has_keyword_set(self.value):
+            expanded_regexp = context.expand_regexp(self.value)
+            return expanded_regexp.search(input_value)
         return self.pattern.search(input_value)
 
     def get_value(self):
@@ -376,101 +390,6 @@ def build_binary_matcher(l, class_object):
     return op_
 
 
-class MatchContext:
-    _contains_dummy_default_object = object()
-
-    def __init__(self, j):
-        self.j = j
-        self.result = []
-
-    def exists(self, name, j=None):
-        j = self.j if j is None else j
-        v = self.get(name, j, self._contains_dummy_default_object)
-        if isinstance(v, list):
-            for i in list(self.NestedListToList(v)):
-                if i is not self._contains_dummy_default_object:
-                    return True
-            return False
-        else:
-            is_dummy_object = v is self._contains_dummy_default_object
-            return not is_dummy_object
-
-    # this function convert list of lists recursively to list
-    def NestedListToList(self, l):
-        for i in l:
-            if isinstance(i, list):
-                for j in self.NestedListToList(i):
-                    yield j
-            else:
-                yield i
-
-    # this function convert dict object values recursively to list
-    def DictToValues(self, j):
-        for v in j.values():
-            if isinstance(v, dict):
-                for j in self.DictToValues(v):
-                    yield j
-            else:
-                yield v
-
-    # find the longest path exists in the json
-    def find_longest_existing_path(self, field_name, j):
-        if pydash.has(j, field_name):
-            return field_name
-
-        while True:
-            split = field_name.rsplit(".", 1)
-            if len(split) == 1 and split[0] != '':
-                return None
-            field_name = split[0]
-            if pydash.has(j, field_name):
-                break
-        return field_name
-
-    def get(self, field_name, j=None, default=''):
-        j = self.j if j is None else j
-
-        # if the field name is *, then get list of all recursive values
-        if field_name == "*":
-            return list(self.DictToValues(j))
-
-        # if the field name start with * (like *.name), then run self.get on all sub values
-        if field_name.startswith("*.") and (isinstance(j, list) or isinstance(j, dict)):
-            values = [self.get(field_name.lstrip("*."), j, default)]
-            for v in j.values():
-                if isinstance(v, list):
-                    for i in v:
-                        values.append(self.get(field_name, i, default))
-                if isinstance(v, dict):
-                    values.append(self.get(field_name, v, default))
-            return values
-
-        if pydash.has(j, field_name):
-            return pydash.get(j, field_name)
-        else:
-            # get the longest path exists in the dict
-            new_field_name = self.find_longest_existing_path(field_name, j)
-            new_value = pydash.get(j, new_field_name)
-            if isinstance(new_value, list) and len(new_value) and isinstance(new_value[0], dict):
-                return [self.get(field_name.lstrip(new_field_name)[1:], nv, default) for nv in new_value]
-            elif isinstance(new_value, dict):
-                return self.get(field_name.lstrip(new_field_name)[1:], new_value)
-
-        return default
-
-    def get_dict(self):
-        return self.j
-
-    def add_result(self, matched):
-        self.result.append(matched)
-
-    def get_result(self):
-        return self.result
-
-    def match_text(self, input_value, value):
-        pass
-
-
 def escape_regexp_term(tokens):
     regexp = tokens[0]
 
@@ -592,9 +511,11 @@ class JsonMatcher():
         except pp.ParseBaseException as e:
             raise JsonMatcherParseException(e)
 
-    def match(self, j, context=None):
-        if not context:
-            context = MatchContext(j)
+    def match(self, j):
+        context = MatchContext(j)
+        return self.match_with_context(context)
+
+    def match_with_context(self, context):
         if self.matcher.eval(context):
             r = JsonMatchResult(context.get_result())
             return r
@@ -643,5 +564,5 @@ def match(expression, j, flags=0):
 
 
 __all__ = ['compile', 'match',
-           'JsonMatcher', 'MatchContext', 'JsonMatchResult',
+           'JsonMatcher', 'JsonMatchResult',
            'IMPLICIT_OR', 'IMPLICIT_AND', 'TERM_MATCH_EQUAL', 'TERM_MATCH_CONTAIN']

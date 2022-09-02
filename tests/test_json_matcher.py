@@ -3,7 +3,10 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import re
+
 import json_matcher
+from json_matcher import MatchEnvironment, MatchContext, KeywordSet
 
 
 def test_compile_text_term():
@@ -16,6 +19,9 @@ def test_compile_text_term():
 
     assert not json_matcher.match('field_name:a{1,3}b', dict(field_name='aab'))
     assert json_matcher.match('field_name:/a{1,3}b/i', dict(field_name='aab'))
+
+    assert json_matcher.match('field_name:/\\d{2,3}/', dict(field_name='123'))
+    assert not json_matcher.match('field_name:/\\d{2,3}/', dict(field_name='1'))
 
 
 def test_compile_range_term():
@@ -283,3 +289,128 @@ def test_equal_continas_option():
     r = matcher.match(dict(field='This is text for equal'))
     l = r.groups()
     assert len(l) == 1
+
+
+def test_keyword_set_in_query():
+    # - environ 을 사용하는 경우: keyword 설정등을 수행할 수 있음
+    # - environ 에 전역 keyword_list map 을 설정할 수도 있으며, 개별 keyword_list 를 설정 가능
+    query = json_matcher.compile('field:@@{keyword}', json_matcher.TERM_MATCH_EQUAL)
+    environ = MatchEnvironment()
+    environ.put_keyword_set('keyword', KeywordSet('keyword', ['A', 'B', 'C']))
+    context = MatchContext({'field': 'A'}, environ)
+    matched = query.match_with_context(context)
+    assert matched
+
+    # - 여러개의 keyword_set 을 등록해서 사용할 수 있다.
+    keyword_set_list = [
+        ('keyword1', ['A', 'B', 'C']),
+        ('keyword2', ['1', '2', '3'])
+    ]
+    environ = MatchEnvironment()
+    for keyword_name, keyword_list in keyword_set_list:
+        keyword_set = KeywordSet(keyword_name, keyword_list)
+        environ.put_keyword_set(keyword_name, keyword_set)
+    query = json_matcher.compile('field:@@{keyword2}', json_matcher.TERM_MATCH_EQUAL)
+    context = MatchContext({'field': '2'}, environ)
+    matched = query.match_with_context(context)
+    assert matched
+
+    context = MatchContext({'field': 'A'}, environ)
+    matched = query.match_with_context(context)
+    assert not matched
+
+    # with default keyword_set
+    query = json_matcher.compile('field:@@{keyword}', json_matcher.TERM_MATCH_EQUAL)
+    keyword_set = KeywordSet('keyword', ['D', 'E', 'F'])
+    context = MatchContext({'field': 'D'}, environ.with_default_keyword_set(keyword_set))
+    matched = query.match_with_context(context)
+    assert matched
+
+    query = json_matcher.compile('field:@@{keyword}', json_matcher.TERM_MATCH_EQUAL)
+    keyword_set = KeywordSet('keyword', ['D', 'E', 'F'])
+    context = MatchContext({'field': '10'}, environ.with_default_keyword_set(keyword_set))
+    matched = query.match_with_context(context)
+    assert not matched
+
+
+def test_keyword_set_in_regexp_query():
+    # - environ / context 를 사용하지 않는 경우
+    query = json_matcher.compile('field:/prefix@@{keyword}postfix/')
+    environ = MatchEnvironment()
+    environ.put_keyword_set('keyword', KeywordSet('keyword', ['A', 'B', 'C']))
+    context = MatchContext({'field': 'prefixApostfix'}, environ)
+    matched = query.match_with_context(context)
+    assert matched
+
+    context = MatchContext({'field': 'prefixDpostfix'}, environ)
+    matched = query.match_with_context(context)
+    assert not matched
+
+    # - 여러개의 keyword_set 을 등록해서 사용할 수 있다.
+    keyword_set_list = [
+        ('keyword1', ['A', 'B', 'C']),
+        ('keyword2', ['1', '2', '3'])
+    ]
+    environ = MatchEnvironment()
+    for keyword_name, keyword_list in keyword_set_list:
+        keyword_set = KeywordSet(keyword_name, keyword_list)
+        environ.put_keyword_set(keyword_name, keyword_set)
+    query = json_matcher.compile('field:/prefix@@{keyword2}postfix/')
+    context = MatchContext({'field': 'prefix2postfix'}, environ)
+    matched = query.match_with_context(context)
+    assert matched
+
+    context = MatchContext({'field': 'prefixApostfix'}, environ)
+    matched = query.match_with_context(context)
+    assert not matched
+
+    # with default keyword_set
+    query = json_matcher.compile('field:/prefix@@{keyword}postfix/', json_matcher.TERM_MATCH_EQUAL)
+    keyword_set = KeywordSet('keyword', ['D', 'E', 'F'])
+    context = MatchContext({'field': 'prefixDpostfix'}, environ.with_default_keyword_set(keyword_set))
+    matched = query.match_with_context(context)
+    assert matched
+
+    query = json_matcher.compile('field:/prefix@@{keyword}postfix/', json_matcher.TERM_MATCH_EQUAL)
+    keyword_set = KeywordSet('keyword', ['D', 'E', 'F'])
+    context = MatchContext({'field': 'prefix10postfix'}, environ.with_default_keyword_set(keyword_set))
+    matched = query.match_with_context(context)
+    assert not matched
+
+    keyword_list = ['보험', '대출', '인터넷', '회생', '견적', '비교', '다운로드', '무료', '영화', '사이트', '결제', 'p2p', '웹하드', '추천',
+                    '바로가기', '다시보기', '주소', '토렌토', '순위']
+    keyword_set = KeywordSet('keyword', keyword_list)
+    environ = MatchEnvironment()
+    regexp = r'.{0,20}@@{keyword}.{0,20}@@\*\*@@http:\/\/\w{3,15}.x.com\/\d{7}"'
+    query = json_matcher.compile('text:/' + regexp + '/')
+    text = ('<span class="copyright_entry" style="display:block;" title="저금리 대출 안심신청 추천 햇살론@@**@@http://akcmp1szke'
+            '.x.com/6866160"></span>')
+    context = MatchContext({'text': text}, environ.with_default_keyword_set(keyword_set))
+    matched = query.match_with_context(context)
+    assert matched
+
+    text = ('<span class="copyright_entry" style="display:block;" title="저금리 대출 안심신청 추천 햇살론@@**@@http://akcmp1szke'
+            '.y.com/6866160"></span>')
+    context = MatchContext({'text': text}, environ.with_default_keyword_set(keyword_set))
+    matched = query.match_with_context(context)
+    assert not matched
+
+
+def test_multiple_keyword_set_in_regexp_query():
+    # - 여러개의 keyword_set 을 등록해서 사용할 수 있다.
+    keyword_set_list = [
+        ('keyword1', ['A', 'B', 'C']),
+        ('keyword2', ['1', '2', '3'])
+    ]
+    environ = MatchEnvironment()
+    for keyword_name, keyword_list in keyword_set_list:
+        keyword_set = KeywordSet(keyword_name, keyword_list)
+        environ.put_keyword_set(keyword_name, keyword_set)
+    query = json_matcher.compile('field:/prefix@@{keyword2}postfix@@{keyword1}/')
+    context = MatchContext({'field': 'prefix2postfixA'}, environ)
+    matched = query.match_with_context(context)
+    assert matched
+
+    context = MatchContext({'field': 'prefixApostfix1'}, environ)
+    matched = query.match_with_context(context)
+    assert not matched
