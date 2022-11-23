@@ -122,7 +122,7 @@ class MatchContext:
                 break
         return field_name
 
-    def get(self, field_name, j=None, default=''):
+    def get(self, field_name, j=None, default=None):
         j = self.j if j is None else j
 
         # if the field name is *, then get list of all recursive values

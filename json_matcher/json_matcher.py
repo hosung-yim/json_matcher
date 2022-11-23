@@ -278,7 +278,7 @@ class TermMatcher:
     def eval(self, context):
         input_value = context.get(self.field_name)
         
-        if not input_value:
+        if input_value is None:
             return False
         r = self.field_value.eval(input_value, context)
         if r:
