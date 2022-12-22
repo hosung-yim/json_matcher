@@ -186,7 +186,6 @@ class MatchContext:
         for name in names:
             keyword_set = self.environ.get_keyword_set(name)
             regexp = keyword_set.expand_regexp(regexp)
-        print(regexp)
         return re.compile(regexp)
 
     def search_keyword_set(self, term, input_value):
