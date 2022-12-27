@@ -405,6 +405,14 @@ def escape_regexp_term(tokens):
         return RQuotedString(regexp, '')
 
 
+def escape_raw_regexp_term(tokens):
+    regexp = tokens[1]
+    if len(tokens) == 4:
+        return RQuotedString(regexp, tokens[-1])
+    else:
+        return RQuotedString(regexp, '')
+
+
 #
 # Grammar
 #
@@ -412,7 +420,8 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     COLON, LBRACK, RBRACK, LBRACE, RBRACE, TILDE, CARAT = map(pp.Literal, ':[]{}~^')
     LPAR, RPAR = map(pp.Suppress, '()')
     AND_, OR_, NOT_, TO_ = map(pp.CaselessKeyword, 'AND OR NOT TO'.split())
-    LTE, LT, GTE, GT, EQ = map(pp.Literal, ['<=', '<', '>=', '>', '='])
+    LTE, LT, GTE, GT, EQ  = map(pp.Literal, ['<=', '<', '>=', '>', '='])
+    RAW_REGEXP_DELIMETER = pp.Literal('/~/')
 
     keyword = AND_ | OR_ | NOT_ | TO_
 
@@ -424,8 +433,10 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     rquoted_string = (pp.QuotedString('/', escChar='\\', escQuote='\\/', unquoteResults=False)
                       + pp.Optional(pp.Regex(r'[i]'))) \
             .setParseAction(lambda t: escape_regexp_term(t))
+    rquoted_string2 = (RAW_REGEXP_DELIMETER + pp.SkipTo(RAW_REGEXP_DELIMETER) + RAW_REGEXP_DELIMETER + pp.Optional(pp.Regex(r'[i]'))) \
+            .setParseAction(lambda t: escape_raw_regexp_term(t))
 
-    field_text_value = (quoted_string | rquoted_string | valid_text )('text_field_value') \
+    field_text_value = (quoted_string | rquoted_string2 | rquoted_string | valid_text )('text_field_value') \
         .setParseAction(lambda t: build_text_matcher(t[0], term_match_op))
 
     field_operate_value = ((LTE | LT | GTE | GT | EQ) + (valid_text | quoted_string))('operate_field_value') \

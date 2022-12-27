@@ -23,6 +23,9 @@ def test_compile_text_term():
     assert json_matcher.match('field_name:/\\d{2,3}/', dict(field_name='123'))
     assert not json_matcher.match('field_name:/\\d{2,3}/', dict(field_name='1'))
 
+    assert json_matcher.match('field_name:/~/a{1,3}b/~/i', dict(field_name='aab'))
+    assert json_matcher.match('field_name:/~/b/{1,3}/~/i', dict(field_name='b/'))
+
 
 def test_compile_range_term():
     assert json_matcher.compile('field_name:[10 TO 30]')
@@ -414,3 +417,10 @@ def test_multiple_keyword_set_in_regexp_query():
     context = MatchContext({'field': 'prefixApostfix1'}, environ)
     matched = query.match_with_context(context)
     assert not matched
+
+
+def test_some_regexp():
+    query = "(html:/(<h1>다운로드<\\/h1>|<td class=gray_solid_file>파일명<\\\\/td><td class=gray_solid_file>용량<\\\\/td>)/)"
+    query = '(html:/~/(<h1>다운로드<\\/h1>|<td class=gray_solid_file>파일명<\\\\/td><td class=gray_solid_file>용량<\\\\/td>)/~/)'
+    print(query)
+    json_matcher.compile(query)
