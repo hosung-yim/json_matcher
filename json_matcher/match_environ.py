@@ -175,6 +175,9 @@ class MatchContext:
 
     def has_keyword_set(self, query):
         names = self.extract_keyword_set_names(query)
+        if not names:
+            return False
+
         for name in names:
             if not self.environ.get_keyword_set(name):
                 return False
@@ -195,8 +198,12 @@ class MatchContext:
 
         keyword_set = self.environ.get_keyword_set(name)
         if not keyword_set:
-            return False
-        return bool(keyword_set.search(input_value))
+            return False, None
+        r = keyword_set.search(input_value)
+        if r:
+            return True, r.group()
+        else:
+            return False, None
 
     def match_keyword_set(self, term, input_value):
         name = self.extract_keyword_set_name(term)
@@ -206,7 +213,12 @@ class MatchContext:
         keyword_set = self.environ.get_keyword_set(name)
         if not keyword_set:
             return False
-        return bool(keyword_set.match(input_value))
+
+        m = keyword_set.match(input_value)
+        if m:
+            return True, m.group()
+        else:
+            return False, None
 
 
 __all__ = ['KeywordSet', 'MatchContext', 'MatchEnvironment']

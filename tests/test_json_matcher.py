@@ -17,6 +17,7 @@ def test_compile_text_term():
     assert json_matcher.match('field_name:/안녕/i', dict(field_name='여러분 안녕하세요'))
     assert json_matcher.match('field_name:/안녕\\//i', dict(field_name='여러분 안녕/하세요'))
 
+    print(json_matcher.match('field_name:a{1,3}b', dict(field_name='aab')))
     assert not json_matcher.match('field_name:a{1,3}b', dict(field_name='aab'))
     assert json_matcher.match('field_name:/a{1,3}b/i', dict(field_name='aab'))
 
@@ -152,19 +153,66 @@ def test_implicit_or():
 
 
 def test_match_result():
-    # OR => short circuit
+    # Term Match
     matcher = json_matcher.compile('A:안녕 B:세상아', json_matcher.IMPLICIT_OR)
     r = matcher.match(dict(A='안녕', B='세상아'))
     l = r.groups()
     assert len(l) == 1
-    assert l[0] == ('A', '안녕')
+    assert l[0] == ('A', '안녕', '안녕')
 
     matcher = json_matcher.compile('A:안녕 B:세상아', json_matcher.IMPLICIT_AND)
     r = matcher.match(dict(A='안녕', B='세상아'))
     l = r.groups()
     assert len(l) == 2
-    assert l[0] == ('A', '안녕')
-    assert l[1] == ('B', '세상아')
+    assert l[0] == ('A', '안녕', '안녕')
+    assert l[1] == ('B', '세상아', '세상아')
+
+    # Term Match (CONTAIN)
+    matcher = json_matcher.compile('A:안녕 B:세상아', json_matcher.TERM_MATCH_CONTAIN)
+    r = matcher.match(dict(A='안녕하세요', B='세상아 반갑다.'))
+    l = r.groups()
+    assert len(l) == 2
+    assert l[0] == ('A', '안녕하세요', '안녕')
+    assert l[1] == ('B', '세상아 반갑다.', '세상아')
+
+    # Regexp Match
+    matcher = json_matcher.compile('A:/[a-zA-Z]+/')
+    r = matcher.match(dict(A='Hello World'))
+    l = r.groups()
+    assert len(l) == 1
+    assert l[0] == ('A', 'Hello World', 'Hello')
+
+    # Fnmatch
+    matcher = json_matcher.compile('A:안녕* B:세상아*', json_matcher.TERM_MATCH_CONTAIN)
+    r = matcher.match(dict(A='안녕하세요', B='세상아 반갑다.'))
+    l = r.groups()
+    assert len(l) == 2
+    assert l[0] == ('A', '안녕하세요', '안녕하세요')
+    assert l[1] == ('B', '세상아 반갑다.', '세상아 반갑다.')
+
+    # Range Match
+    matcher = json_matcher.compile('field_name:[10 TO 30]')
+    r = matcher.match(dict(field_name=[1, 2, 3, 4, 5, 20]))
+    l = r.groups()
+    assert len(l) == 1
+    assert l[0] == ('field_name', [1, 2, 3, 4, 5, 20], 20)
+
+    # Operate
+    matcher = json_matcher.compile('field_name:>10')
+    r = matcher.match(dict(field_name=20))
+    l = r.groups()
+    assert len(l) == 1
+    assert l[0] == ('field_name', 20, 20)
+
+    # Keyword Match
+    query = json_matcher.compile('field:@@{keyword}', json_matcher.TERM_MATCH_EQUAL)
+    environ = MatchEnvironment()
+    environ.put_keyword_set('keyword', KeywordSet('keyword', ['A', 'B', 'C']))
+    context = MatchContext({'field': 'A'}, environ)
+    matched = query.match_with_context(context)
+    l = matched.groups()
+    assert len(l) == 1
+    assert l[0] == ('field', 'A', 'A')
 
 
 def test_field_has_data_with_wildcard():
@@ -424,3 +472,26 @@ def test_some_regexp():
     query = '(html:/~/(<h1>다운로드<\\/h1>|<td class=gray_solid_file>파일명<\\\\/td><td class=gray_solid_file>용량<\\\\/td>)/~/)'
     print(query)
     json_matcher.compile(query)
+
+
+def test_extract_match_keyword():
+    # Simple Term
+    assert json_matcher.match('field_name:"*안녕*"', dict(field_name='여러분 안녕하세요'))
+    assert json_matcher.match('field_name:/안녕\\//i', dict(field_name='여러분 안녕/하세요'))
+
+    assert json_matcher.match('field_name:/(안녕|여러분|세상아)/i', dict(field_name='여러분 안녕/하세요'))
+
+
+    # Regular Expression
+    assert json_matcher.match('field_name:/a{1,3}b/i', dict(field_name='aab'))
+    assert json_matcher.match('field_name:/\\d{2,3}/', dict(field_name='123'))
+    assert json_matcher.match('field_name:/~/a{1,3}b/~/i', dict(field_name='aab'))
+    assert json_matcher.match('field_name:/~/b/{1,3}/~/i', dict(field_name='b/'))
+
+    # Keyword
+    query = json_matcher.compile('field:/prefix@@{keyword}postfix/')
+    environ = MatchEnvironment()
+    environ.put_keyword_set('keyword', KeywordSet('keyword', ['A', 'B', 'C']))
+    context = MatchContext({'field': 'prefixApostfix'}, environ)
+    matched = query.match_with_context(context)
+    assert matched

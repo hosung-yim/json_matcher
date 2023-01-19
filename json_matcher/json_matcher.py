@@ -75,12 +75,14 @@ class BaseMatcher:
         # 시작하기 전에 한번 검사해서 flat_nested_object 에 의한 generator 생성을 차단
         if isinstance(input_value, numbers.Number) or isinstance(input_value, string_types):
             return self.eval_one(input_value, context)
+
         for name, value in flat_nested_object(input_value):
             if isinstance(input_value , list) and len(input_value) and isinstance(input_value[0] , dict):
                 break
-            if self.eval_one(value, context):
-                return True
-        return False
+            matched, matched_value = self.eval_one(value, context)
+            if matched:
+                return matched, matched_value
+        return False, None
 
 
 class TextMatcher(BaseMatcher):
@@ -99,33 +101,37 @@ class TextMatcher(BaseMatcher):
         # input_value 가 숫자형태인 경우 Int/Float 변환을 통한 매치를 우선 시도한다.
         if not self.quoted and isinstance(input_value, numbers.Number):
             try:
-                return int(self.value) == int(input_value)
+                return int(self.value) == int(input_value), input_value
             except ValueError:
                 pass
 
             try:
-                return (abs(float(self.value)) - abs(float(input_value))) < 1e-09
+                return (abs(float(self.value)) - abs(float(input_value))) < 1e-09, input_value
             except ValueError:
                 pass
+
         if not isinstance(input_value, string_types):
             input_value = str(input_value)
 
         # keyword set 설정이 있는 경우 반영한다.
         if context.has_keyword_set(self.value):
             if self.term_match_op == TERM_MATCH_OP_CONTAIN:
-                if context.search_keyword_set(self.value, input_value):
-                    return True
+                r = context.search_keyword_set(self.value, input_value)
             else:
-                if context.match_keyword_set(self.value, input_value):
-                    return True
+                r = context.match_keyword_set(self.value, input_value)
+
+            if r:
+                return r
+            else:
+                return False, None
 
         if '*' in self.value or '?' in self.value:
-            return fnmatch.fnmatch(input_value, self.value)
+            return fnmatch.fnmatch(input_value, self.value), input_value
 
         if self.term_match_op == TERM_MATCH_OP_CONTAIN:
-            return self.value in input_value
+            return self.value in input_value, self.value
         else:
-            return self.value == input_value
+            return self.value == input_value, self.value
 
     def get_value(self):
         return self.value
@@ -152,8 +158,14 @@ class RegexpMatcher(BaseMatcher):
         # keyword set 설정이 있는 경우 반영한다.
         if context.has_keyword_set(self.value):
             expanded_regexp = context.expand_regexp(self.value)
-            return expanded_regexp.search(input_value)
-        return self.pattern.search(input_value)
+            m = expanded_regexp.search(input_value)
+        else:
+            m = self.pattern.search(input_value)
+
+        if m:
+            return True, m.group()
+        else:
+            return False, None
 
     def get_value(self):
         return self.value
@@ -176,10 +188,10 @@ class MultipleTextMatcher(BaseMatcher):
 
     def eval_one(self, input_value, context):
         for matcher in self.matchers:
-            if matcher.eval_one(input_value, context):
-                context.add_result(matcher.get_value())
-                return True
-        return False
+            matched, matched_value = matcher.eval_one(input_value, context)
+            if matched:
+                return matched, matched_value
+        return False, None
 
 
 class Operator(BaseMatcher):
@@ -201,16 +213,16 @@ class Operator(BaseMatcher):
 
     def _eval(self, condition_value, op, input_value):
         if op == '<=':
-            return input_value <= condition_value
+            return input_value <= condition_value, input_value
         elif op == '<':
-            return input_value < condition_value
+            return input_value < condition_value, input_value
         elif op == '>=':
-            return input_value >= condition_value
+            return input_value >= condition_value, input_value
         elif op == '>':
-            return input_value > condition_value
+            return input_value > condition_value, input_value
         elif op == '=':
             pass
-        return input_value == condition_value
+        return input_value == condition_value, input_value
 
     def eval_one(self, input_value, context):
         #
@@ -222,11 +234,11 @@ class Operator(BaseMatcher):
         if isinstance(input_value, numbers.Number):
             if self.is_float:
                 return self._eval(self.float_value, self.op, input_value)
-            return False
+            return False, None
         try:
             return self._eval(self.value, self.op, input_value)
         except TypeError as e:
-            return False
+            return False, None
 
 
 class RangeMatcher(BaseMatcher):
@@ -255,16 +267,16 @@ class RangeMatcher(BaseMatcher):
             try:
                 input_value = float(input_value)
             except ValueError as e:
-                return False
+                return False, None
         elif not isinstance(input_value, str):
             input_value = str(input_value)
 
         try:
             if self.incl:
-                return self.start <= input_value <= self.stop
-            return self.start < input_value < self.stop
+                return self.start <= input_value <= self.stop, input_value
+            return self.start < input_value < self.stop, input_value
         except TypeError as e:
-            return False
+            return False, None
 
 
 class TermMatcher:
@@ -279,11 +291,12 @@ class TermMatcher:
         input_value = context.get(self.field_name)
         
         if input_value is None:
-            return False
-        r = self.field_value.eval(input_value, context)
-        if r:
-            context.add_result((self.field_name, input_value))
-        return r
+            return False, None
+
+        matched, matched_value = self.field_value.eval(input_value, context)
+        if matched:
+            context.add_result((self.field_name, input_value, matched_value))
+        return matched, matched_value
 
 
 class DictOrObject:
@@ -321,10 +334,11 @@ class ExpressionMatcher:
             local = DictOrObject(context.get_dict())
             ret = eval(self.compiled, {}, local)
         except (AttributeError, TypeError):
-            return False
+            return False, None
         except Exception as e:
             raise e
-        return ret
+
+        return ret, ret
 
 
 class ExistsMatcher:
@@ -335,7 +349,7 @@ class ExistsMatcher:
         return 'ExistsMatcher({})'.format(self.variable_name)
 
     def eval(self, context):
-        return context.exists(self.variable_name)
+        return context.exists(self.variable_name), self.variable_name
 
 
 def build_term_matcher(field_name, field_value):
@@ -354,7 +368,11 @@ class NotMatcher:
         return 'NOT({})'.format(self.term)
 
     def eval(self, context):
-        return not self.term.eval(context)
+        matched, matched_value = self.term.eval(context)
+        if not matched:
+            return True, None
+        else:
+            return False, None
 
 
 class OrMatcher:
@@ -365,7 +383,13 @@ class OrMatcher:
         return 'OR({},{})'.format(self.left, self.right)
 
     def eval(self, context):
-        return self.left.eval(context) or self.right.eval(context)
+        lmatched, lmatched_value = self.left.eval(context)
+        if lmatched:
+            return lmatched, lmatched_value
+        rmatched, rmatched_value = self.right.eval(context)
+        if rmatched:
+            return rmatched, rmatched_value
+        return False, None
 
 
 class AndMatcher:
@@ -377,7 +401,13 @@ class AndMatcher:
         return 'AND({}, {})'.format(self.left, self.right)
 
     def eval(self, context):
-        return self.left.eval(context) and self.right.eval(context)
+        lmatched, lmatched_value = self.left.eval(context)
+        if not lmatched:
+            return False, None
+        rmatched, rmatched_value = self.right.eval(context)
+        if not rmatched:
+            return False, None
+        return True, (lmatched_value, rmatched_value)
 
 
 def build_binary_matcher(l, class_object):
@@ -504,9 +534,12 @@ def build_json_matcher(expr, implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=
     return matcher
 
 
+JsonMatchValue = collections.namedtuple('JsonMatchedValue', ['field_name', 'query_value', 'matched_value'])
+
+
 class JsonMatchResult:
-    def __init__(self, matched):
-        self.matched = matched
+    def __init__(self, matched_list):
+        self.matched = list(map(lambda matched: JsonMatchValue(*matched), matched_list))
 
     def group(self, idx=0):
         return self.matched[idx]
@@ -527,7 +560,8 @@ class JsonMatcher():
         return self.match_with_context(context)
 
     def match_with_context(self, context):
-        if self.matcher.eval(context):
+        matched, matched_value = self.matcher.eval(context)
+        if matched:
             r = JsonMatchResult(context.get_result())
             return r
         return
