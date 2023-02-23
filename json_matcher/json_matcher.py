@@ -97,6 +97,18 @@ class TextMatcher(BaseMatcher):
     def __repr__(self):
         return 'TextMatcher:{}'.format(self.value)
 
+    def count(self, input_value, context):
+        if not isinstance(input_value, string_types):
+            input_value = str(input_value)
+
+        # keyword set 설정이 있는 경우 반영한다.
+        if context.has_keyword_set(self.value):
+            count, matched_value = context.count_keyword_set(self.value, input_value)
+            return count, matched_value
+        else:
+            count = input_value.count(self.value)
+            return count, self.value
+
     def eval_one(self, input_value, context):
         # input_value 가 숫자형태인 경우 Int/Float 변환을 통한 매치를 우선 시도한다.
         if not self.quoted and isinstance(input_value, numbers.Number):
@@ -151,6 +163,27 @@ class RegexpMatcher(BaseMatcher):
     def __repr__(self):
         return 'RegexpMatcher:{}'.format(self.value)
 
+    def count(self, input_value, context):
+        if not isinstance(input_value, string_types):
+            input_value = str(input_value)
+
+        # keyword set 설정이 있는 경우 반영한다.
+        pattern = self.pattern
+        if context.has_keyword_set(self.value):
+            pattern = context.expand_regexp(self.value)
+
+        last_matched = ''
+        count = 0
+        start = 0
+        while True:
+            m = pattern.search(input_value[start:])
+            if not m:
+                break
+            last_matched = m.group()
+            start += m.start() + 1
+            count += 1
+        return count, last_matched
+
     def eval_one(self, input_value, context):
         if not isinstance(input_value, string_types):
             input_value = str(input_value)
@@ -192,6 +225,51 @@ class MultipleTextMatcher(BaseMatcher):
             if matched:
                 return matched, matched_value
         return False, None
+
+
+class CountingMatcher(BaseMatcher):
+    def __init__(self, matcher, op, condition_value):
+        self.matcher = matcher
+        self.op = op
+        self.condition_value = int(condition_value.value)
+
+    def __repr__(self):
+        return f'CountingMatcher({self.matcher},{self.op},{self.condition_value})'
+
+    def count(self, value, context):
+        count, matched_value = self.matcher.count(value, context)
+        return count, matched_value
+
+    def eval_one(self, input_value, context):
+        return self.count(input_value, context)
+
+    def eval(self, input_value, context):
+        count = 0
+        last_matched = ''
+
+        # 시작하기 전에 한번 검사해서 flat_nested_object 에 의한 generator 생성을 차단
+        if isinstance(input_value, numbers.Number) or isinstance(input_value, string_types):
+            count, last_matched = self.eval_one(input_value, context)
+        else:
+            for name, value in flat_nested_object(input_value):
+                if isinstance(input_value, list) and len(input_value) and isinstance(input_value[0], dict):
+                    break
+                e_count, e_last_matched = self.eval_one(value, context)
+                if e_count > 0:
+                    count += e_count
+                    last_matched = e_last_matched
+
+        if self.op == '<=':
+            return count <= self.condition_value, last_matched
+        elif self.op == '<':
+            return count < self.condition_value, last_matched
+        elif self.op == '>=':
+            return count >= self.condition_value, last_matched
+        elif self.op == '>':
+            return count > self.condition_value, last_matched
+        elif self.op == '=':
+            pass
+        return count == self.condition_value, last_matched
 
 
 class Operator(BaseMatcher):
@@ -452,6 +530,7 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     AND_, OR_, NOT_, TO_ = map(pp.CaselessKeyword, 'AND OR NOT TO'.split())
     LTE, LT, GTE, GT, EQ  = map(pp.Literal, ['<=', '<', '>=', '>', '='])
     RAW_REGEXP_DELIMETER = pp.Literal('/~/')
+    COUNT_NAME = 'COUNT'
 
     keyword = AND_ | OR_ | NOT_ | TO_
 
@@ -483,8 +562,11 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     field_multiple_value = (LPAR + pp.OneOrMore(multiple_field_text_value) + RPAR)('multiple_field_value') \
         .setParseAction(lambda t: MultipleTextMatcher(t, term_match_op))
 
+    field_count_value = (COUNT_NAME + LPAR + field_text_value + RPAR + (LTE | LT | GTE | GT | EQ) + (valid_text)) \
+        .setParseAction(lambda t: CountingMatcher(t[1], t[2], t[3]))
+
     field_name = valid_keyword
-    field_value = (field_multiple_value | field_operate_value | field_range_value | field_text_value)
+    field_value = (field_count_value | field_multiple_value | field_operate_value | field_range_value | field_text_value)
     field_term = pp.Group(field_name('field_name') + COLON + field_value) \
         .setParseAction(lambda t: build_term_matcher(t[0][0], t[0][2]))
 

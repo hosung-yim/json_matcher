@@ -46,6 +46,21 @@ class KeywordSet(object):
     def match(self, value):
         return self.get_regexp_exact().match(value)
 
+    def count(self, value):
+        pattern = self.get_regexp()
+
+        last_matched = ''
+        count = 0
+        start = 0
+        while True:
+            m = pattern.search(value[start:])
+            if not m:
+                break
+            last_matched = m.group()
+            count += 1
+            start += m.start() + 1
+        return count, last_matched
+
 
 class MatchEnvironment(object):
     def __init__(self):
@@ -219,6 +234,17 @@ class MatchContext:
             return True, m.group()
         else:
             return False, None
+
+    def count_keyword_set(self, term, input_value):
+        name = self.extract_keyword_set_name(term)
+        if not name:
+            return False
+
+        keyword_set = self.environ.get_keyword_set(name)
+        if not keyword_set:
+            return False, None
+        count, last_matched = keyword_set.count(input_value)
+        return count, last_matched
 
 
 __all__ = ['KeywordSet', 'MatchContext', 'MatchEnvironment']

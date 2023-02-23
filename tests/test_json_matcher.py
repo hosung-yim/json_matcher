@@ -495,3 +495,57 @@ def test_extract_match_keyword():
     context = MatchContext({'field': 'prefixApostfix'}, environ)
     matched = query.match_with_context(context)
     assert matched
+
+
+def test_counting_matcher():
+    data = {
+        'field_name': 'match1 match2 match3 match4 match5 match6'
+    }
+
+    assert json_matcher.match('field_name:COUNT(match)=6', data)
+    assert json_matcher.match('field_name:COUNT(match)>=6', data)
+    assert json_matcher.match('field_name:COUNT(match)>5', data)
+    assert json_matcher.match('field_name:COUNT(match)<=6', data)
+    assert json_matcher.match('field_name:COUNT(match)<7', data)
+
+    assert not json_matcher.match('field_name:COUNT(match)<1', data)
+
+    assert json_matcher.match('field_name:COUNT(/match\\d/)=6', data)
+    assert json_matcher.match('field_name:COUNT(/match\\d/)>=6', data)
+    assert json_matcher.match('field_name:COUNT(/match\\d/)>5', data)
+    assert json_matcher.match('field_name:COUNT(/match\\d/)<=6', data)
+    assert json_matcher.match('field_name:COUNT(/match\\d/)<7', data)
+
+    assert not json_matcher.match('field_name:COUNT(/match\\d/)>1000', data)
+    assert json_matcher.match('field_name:COUNT(/~/match[1]/~/)=1', data)
+
+    environ = MatchEnvironment()
+    environ.put_keyword_set('keyword', KeywordSet('keyword', ['match']))
+    context = MatchContext(data, environ)
+
+    assert json_matcher.compile('field_name:COUNT(@@{keyword})=6').match_with_context(context)
+    assert json_matcher.compile('field_name:COUNT(@@{keyword})>=6').match_with_context(context)
+    assert json_matcher.compile('field_name:COUNT(@@{keyword})>5').match_with_context(context)
+    assert json_matcher.compile('field_name:COUNT(@@{keyword})<=6').match_with_context(context)
+    assert json_matcher.compile('field_name:COUNT(@@{keyword})<7').match_with_context(context)
+
+    data2 = {
+        'field_name': ['match1', 'match2', 'match3', 'match4', 'match5', 'match6']
+    }
+
+    assert json_matcher.match('field_name:COUNT(match)=6', data2)
+    assert json_matcher.match('field_name:COUNT(match)>=6', data2)
+    assert json_matcher.match('field_name:COUNT(match)>5', data2)
+    assert json_matcher.match('field_name:COUNT(match)<=6', data2)
+    assert json_matcher.match('field_name:COUNT(match)<7', data2)
+
+    data3 = {
+        'field_name': '한글 테스트입니다. 잘 될까요? 한글 한글'
+    }
+
+    assert json_matcher.match('field_name:COUNT(한글)=3', data3)
+    assert json_matcher.match('field_name:COUNT(한글 )=3', data3)
+    assert json_matcher.match('field_name:COUNT("한글 ")=2', data3)
+    assert json_matcher.match('field_name:COUNT("한글 테스트")=1', data3)
+
+    assert not json_matcher.match('field_name:"COUNT(한글)=3"', data3)
