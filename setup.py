@@ -13,7 +13,7 @@ packages = setuptools.find_packages(exclude=['tests'])
 
 setuptools.setup(
     name="json_matcher",
-    version="0.0.11",
+    version="0.0.12",
     url="https://github.com/hosung-yim/json_matcher",
     dowload_url="https://github.com/hosung-yim/json_matcher/archive/refs/tags/0.0.11.tar.gz",
 
