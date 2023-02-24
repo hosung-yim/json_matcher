@@ -12,12 +12,10 @@ import pyparsing as pp
 
 from .match_environ import MatchContext
 
-
 IMPLICIT_BIN_OP_AND = 'AND'
 IMPLICIT_BIN_OP_OR = 'OR'
 TERM_MATCH_OP_EQUAL = 'EQUAL'
 TERM_MATCH_OP_CONTAIN = 'CONTAIN'
-
 
 pp.ParserElement.enablePackrat()
 
@@ -77,7 +75,7 @@ class BaseMatcher:
             return self.eval_one(input_value, context)
 
         for name, value in flat_nested_object(input_value):
-            if isinstance(input_value , list) and len(input_value) and isinstance(input_value[0] , dict):
+            if isinstance(input_value, list) and len(input_value) and isinstance(input_value[0], dict):
                 break
             matched, matched_value = self.eval_one(value, context)
             if matched:
@@ -411,7 +409,7 @@ class TermMatcher:
 
     def eval(self, context):
         input_value = context.get(self.field_name)
-        
+
         if input_value is None:
             return False, None
 
@@ -712,7 +710,6 @@ IMPLICIT_OR = 1 << 0
 IMPLICIT_AND = 1 << 1
 TERM_MATCH_EQUAL = 1 << 2
 TERM_MATCH_CONTAIN = 1 << 3
-
 
 default_term_match_op = TERM_MATCH_OP_EQUAL
 
