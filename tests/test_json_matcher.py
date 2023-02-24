@@ -549,3 +549,50 @@ def test_counting_matcher():
     assert json_matcher.match('field_name:COUNT("한글 테스트")=1', data3)
 
     assert not json_matcher.match('field_name:"COUNT(한글)=3"', data3)
+
+
+def test_code_matcher():
+    data = {
+        'field_str': 'string value field',
+        'field_int': 10,
+        'field_zero': 0,
+        'field_true': True,
+        'field_false': False
+
+    }
+    environ = MatchEnvironment()
+    environ.add_function('function_first_word', lambda s: s.split()[0])
+    environ.add_function('function_true', lambda t: True)
+    environ.add_function('function_false', lambda t: False)
+    environ.add_function('function_identy', lambda t: bool(t))
+    environ.add_function('function_name', lambda t: 'function')
+    environ.add_function('function_2', lambda t, a1: a1)
+    environ.add_function('function_3', lambda t, a1, a2: a2)
+    context = MatchContext(data, environ)
+
+    # 1 argument functions
+    assert json_matcher.compile('field_str:!function_true').match_with_context(context)
+    assert not json_matcher.compile('field_str:!function_false').match_with_context(context)
+    assert json_matcher.compile('field_int:!function_identy').match_with_context(context)
+    assert not json_matcher.compile('field_zero:!function_identy').match_with_context(context)
+    assert json_matcher.compile('field_true:!function_identy').match_with_context(context)
+    assert not json_matcher.compile('field_false:!function_identy').match_with_context(context)
+
+    # 1 argument function with explicit argument
+    assert json_matcher.compile('field_true:!function_identy(this)').match_with_context(context)
+    assert not json_matcher.compile('field_false:!function_identy(this)').match_with_context(context)
+
+    # 2 or more argument
+    assert json_matcher.compile('field_true:!function_2(this,"argument1")').match_with_context(context)
+    assert json_matcher.compile('field_true:!function_3(this,"argument1",True)').match_with_context(context)
+    assert not json_matcher.compile('field_true:!function_3(this,"argument1",False)').match_with_context(context)
+
+    # function with return value
+    assert json_matcher.compile('field_false:!function_identy(this)==False').match_with_context(context)
+
+    # with double quote with space
+    assert json_matcher.compile('''field_true:!"function_2(this, 'argument1')"''').match_with_context(context)
+
+    # using with _expr_
+    assert json_matcher.compile('_expr_:"function_identy(field_true)"').match_with_context(context)
+    assert json_matcher.compile('''_expr_:"function_first_word(field_str)=='string'"''').match_with_context(context)

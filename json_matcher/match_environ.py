@@ -65,6 +65,7 @@ class KeywordSet(object):
 class MatchEnvironment(object):
     def __init__(self):
         self.keyword_sets = {}
+        self.functions = {}
 
     def put_keyword_set(self, name, keyword_set):
         self.keyword_sets[name] = keyword_set
@@ -77,6 +78,12 @@ class MatchEnvironment(object):
         new_environment.keyword_sets = dict(self.keyword_sets)
         new_environment.keyword_sets[DEFAULT_KEYWORD_SET_NAME] = keyword_set
         return new_environment
+
+    def add_function(self, function_name, function):
+        self.functions[function_name] = function
+
+    def get_functions(self):
+        return self.functions
 
 
 EMPTY_ENVIRONMENT = MatchEnvironment()

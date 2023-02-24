@@ -272,6 +272,50 @@ class CountingMatcher(BaseMatcher):
         return count == self.condition_value, last_matched
 
 
+class CodeMatcher:
+    def __init__(self, expression):
+        self.expression = expression
+        self.compiled = __builtins__['compile'](expression, '_expression_matcher', 'eval')
+        parsed = ast.parse(expression)
+        self.variable_names = [node.id for node in ast.walk(parsed) if isinstance(node, ast.Name)]
+
+    def __repr__(self):
+        return 'CodeMatcher({})'.format(self.expression)
+
+    def create_local(self, input_value, context):
+        local = {}
+        functions = context.environ.get_functions()
+
+        local.update(functions)
+        local['this'] = input_value
+        return local
+
+    def is_no_args_function(self, local):
+        first = self.variable_names[0] if len(self.variable_names) == 1 else None
+        if first and callable(local.get(first)):
+            return True
+        else:
+            return False
+
+    def call_single_function(self, local, this):
+        first = self.variable_names[0]
+        return local[first](this)
+
+    def eval(self, input_value, context):
+        this = input_value
+        local = self.create_local(input_value, context)
+        try:
+            if self.is_no_args_function(local):
+                ret = self.call_single_function(local, this)
+            else:
+                ret = eval(self.compiled, {}, local)
+        except (AttributeError, TypeError) as e:
+            return False, None
+        except Exception as e:
+            raise e
+        return ret, ret
+
+
 class Operator(BaseMatcher):
     def __init__(self, op, value):
         self.op = op
@@ -407,11 +451,17 @@ class ExpressionMatcher:
     def __repr__(self):
         return 'ExpressionMatcher({})'.format(self.expression)
 
+    def get_local(self, context):
+        functions = context.environ.get_functions()
+        local = dict(context.get_dict())
+        local.update(functions)
+        return DictOrObject(local)
+
     def eval(self, context):
         try:
-            local = DictOrObject(context.get_dict())
+            local = self.get_local(context)
             ret = eval(self.compiled, {}, local)
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError) as e:
             return False, None
         except Exception as e:
             raise e
@@ -531,12 +581,14 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     LTE, LT, GTE, GT, EQ  = map(pp.Literal, ['<=', '<', '>=', '>', '='])
     RAW_REGEXP_DELIMETER = pp.Literal('/~/')
     COUNT_NAME = 'COUNT'
+    START_OF_CODE = '!'
 
     keyword = AND_ | OR_ | NOT_ | TO_
 
     expression = pp.Forward()
 
     valid_keyword = pp.Regex(r'[a-zA-Z_*@][a-zA-Z0-9_*@.\[\]]*')
+    valid_code = pp.Regex(r'([^\s]+)').setParseAction(lambda t: ValidText(t[0]))
     valid_text = pp.Regex(r'([^\s\)]+)').setParseAction(lambda t: ValidText(t[0]))
     quoted_string = pp.QuotedString('"').setParseAction(lambda t: QuotedString(t[0]))
     rquoted_string = (pp.QuotedString('/', escChar='\\', escQuote='\\/', unquoteResults=False)
@@ -565,8 +617,14 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     field_count_value = (COUNT_NAME + LPAR + field_text_value + RPAR + (LTE | LT | GTE | GT | EQ) + (valid_text)) \
         .setParseAction(lambda t: CountingMatcher(t[1], t[2], t[3]))
 
+    field_code_string = (quoted_string | valid_code)('code_field_value')
+    field_code_value = (START_OF_CODE + field_code_string) \
+        .setParseAction(lambda t: CodeMatcher(t[1].value))
+
     field_name = valid_keyword
-    field_value = (field_count_value | field_multiple_value | field_operate_value | field_range_value | field_text_value)
+    field_value = (field_code_value | field_count_value |
+                   field_multiple_value | field_operate_value |
+                   field_range_value | field_text_value)
     field_term = pp.Group(field_name('field_name') + COLON + field_value) \
         .setParseAction(lambda t: build_term_matcher(t[0][0], t[0][2]))
 
