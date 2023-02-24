@@ -40,7 +40,7 @@ RQuotedString = collections.namedtuple('RQuotedString', ['value', 'options'])
 def flat_nested_object(o, pathes=None, depth=0, max_depth=10):
     if depth >= max_depth:
         return
-    if pathes == None:
+    if pathes is None:
         pathes = []
     if isinstance(o, list):
         for idx, item in enumerate(o):
@@ -68,6 +68,9 @@ class BaseMatcher:
                 일단 TypeError 를 발생하도록 우회
         """
         raise TypeError
+
+    def eval_one(self, input_value, context):
+        raise NotImplemented
 
     def eval(self, input_value, context):
         # 시작하기 전에 한번 검사해서 flat_nested_object 에 의한 generator 생성을 차단
@@ -368,7 +371,7 @@ class RangeMatcher(BaseMatcher):
             start = float(start)
             stop = float(stop)
             self.is_float = True
-        except:
+        except Exception:
             self.is_float = False
         self.start = start
         self.stop = stop
@@ -580,8 +583,6 @@ def get_parser(implicit_bin_op=IMPLICIT_BIN_OP_AND, term_match_op=TERM_MATCH_OP_
     RAW_REGEXP_DELIMETER = pp.Literal('/~/')
     COUNT_NAME = 'COUNT'
     START_OF_CODE = '!'
-
-    keyword = AND_ | OR_ | NOT_ | TO_
 
     expression = pp.Forward()
 
