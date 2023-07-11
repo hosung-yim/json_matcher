@@ -499,7 +499,9 @@ class NotMatcher:
     def eval(self, context):
         matched, matched_value = self.term.eval(context)
         if not matched:
-            return True, None
+            if not context.get_result():
+                context.add_result(('NOT', 'NOT', 'NOT'))
+            return True, 'NOT'
         else:
             return False, None
 

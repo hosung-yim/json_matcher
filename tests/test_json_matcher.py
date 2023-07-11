@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 import re
 
 import json_matcher
-from json_matcher import MatchEnvironment, MatchContext, KeywordSet
+from json_matcher import MatchEnvironment, MatchContext, KeywordSet, TERM_MATCH_CONTAIN
 
 
 def test_compile_text_term():
@@ -596,3 +596,14 @@ def test_code_matcher():
     # using with _expr_
     assert json_matcher.compile('_expr_:"function_identy(field_true)"').match_with_context(context)
     assert json_matcher.compile('''_expr_:"function_first_word(field_str)=='string'"''').match_with_context(context)
+
+
+def test_not_expression_groups():
+    data = {'field_name': 'field_value'}
+    query = 'NOT field_name:not_string'
+
+    matcher = json_matcher.compile(query)
+    r = matcher.match(data)
+    l = r.groups()
+
+    assert len(l) > 0
