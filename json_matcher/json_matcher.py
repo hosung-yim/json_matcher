@@ -111,17 +111,27 @@ class TextMatcher(BaseMatcher):
             return count, self.value
 
     def eval_one(self, input_value, context):
-        # input_value 가 숫자형태인 경우 Int/Float 변환을 통한 매치를 우선 시도한다.
-        if not self.quoted and isinstance(input_value, numbers.Number):
-            try:
-                return int(self.value) == int(input_value), input_value
-            except ValueError:
-                pass
+        if not self.quoted:
+            if isinstance(input_value, bool):
+                # If input_value is bool value, try boolean match
+                # XXX: isinstance(True, numbers.Number) == True. So we try boolean first.
+                try:
+                    if self.value.lower() in ['true', 'false']:
+                        boolean_value = self.value.lower() == 'true'
+                        return boolean_value == input_value, input_value
+                except ValueError:
+                    pass
+            elif isinstance(input_value, numbers.Number):
+                # If input_value is numeric value, try Int/Float match
+                try:
+                    return int(self.value) == int(input_value), input_value
+                except ValueError:
+                    pass
 
-            try:
-                return (abs(float(self.value)) - abs(float(input_value))) < 1e-09, input_value
-            except ValueError:
-                pass
+                try:
+                    return (abs(float(str(self.value))) - abs(float(input_value))) < 1e-09, input_value
+                except ValueError:
+                    pass
 
         if not isinstance(input_value, string_types):
             input_value = str(input_value)

@@ -607,3 +607,29 @@ def test_not_expression_groups():
     l = r.groups()
 
     assert len(l) > 0
+
+
+def test_bool_string():
+    data = {'field_name': True}
+
+    query = 'field_name:True'
+    assert json_matcher.match(query, data)
+
+    query_with_small_true = 'field_name:true'
+    assert json_matcher.match(query_with_small_true, data)
+
+    data = {'field_name': False}
+
+    query = 'field_name:False'
+    assert json_matcher.match(query, data)
+
+    query_with_small_true = 'field_name:false'
+    assert json_matcher.match(query_with_small_true, data)
+
+    data = {'field_name': False}
+
+    query = 'field_name:string_value'
+    assert not json_matcher.match(query, data)
+
+    query = 'field_name:0'
+    assert not json_matcher.match(query, data)
