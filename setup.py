@@ -13,9 +13,9 @@ packages = setuptools.find_packages(exclude=['tests'])
 
 setuptools.setup(
     name="json_matcher",
-    version="0.0.13",
+    version="0.0.14",
     url="https://github.com/hosung-yim/json_matcher",
-    dowload_url="https://github.com/hosung-yim/json_matcher/archive/refs/tags/0.0.11.tar.gz",
+    dowload_url="https://github.com/hosung-yim/json_matcher/archive/refs/tags/0.0.14.tar.gz",
 
     author="Greg.YIM",
     author_email="greg.yim@kakaocorp.com",
@@ -34,7 +34,6 @@ setuptools.setup(
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3',
     ],
 )
